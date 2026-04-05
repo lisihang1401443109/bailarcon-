@@ -158,15 +158,21 @@ class Game {
         this.landmarks = null;
         this.objects = [];
         this.activeObjects = [];
+        // State
         this.gameStartTime = 0;
         this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
         this.smoothLandmarks = []; // Step 3.1: Global Stabilization
         this.latency = 0; // Step 3: Performance benchmark
 
-        // Phase 4: Menu State
+        // Phase 3 & 4: Control & Menu State
+        this.handVelocity = { 15: { vx: 0, vy: 0, vz: 0 }, 16: { vx: 0, vy: 0, vz: 0 } };
+        this.handPath = { 15: [], 16: [] };
+        this.lastGesture = "NONE";
+        this.gestureTime = 0;
+
         this.selectedMapIdx = 0;
-        this.dwellTime = 0; // ms hovering
-        this.dwellIdx = -1; // which map is being hovered
+        this.dwellTime = 0;
+        this.dwellIdx = -1;
         this.maps = maps;
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
