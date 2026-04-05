@@ -231,9 +231,10 @@ class Game {
     }
 
     startGame() {
-        console.log("GAME STARTING...");
+        const selectedMap = this.maps[this.selectedMapIdx];
+        console.log(`STARTING MAP: ${selectedMap.title}`);
         this.screen = SCREENS.PLAYING;
-        this.startScreen.style.display = 'none';
+        // ...
         this.gameStartTime = performance.now();
         this.score = 0; this.combo = 0; this.hits = 0; this.totalObjects = 0;
         this.objects = sampleBeatmap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
