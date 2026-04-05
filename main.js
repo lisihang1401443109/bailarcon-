@@ -160,6 +160,7 @@ class Game {
         this.activeObjects = [];
         this.gameStartTime = 0;
         this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
+        this.latency = 0; // Step 3: Performance benchmark
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
         this.init();
@@ -199,13 +200,15 @@ class Game {
             this.poseLandmarker = await PoseLandmarker.createFromOptions(resolver, {
                 baseOptions: {
                     modelAssetPath: `./pose_landmarker.task`,
-                    delegate: "CPU"
+                    delegate: "GPU"
                 },
                 runningMode: "VIDEO",
                 numPoses: 1,
                 minPoseDetectionConfidence: 0.1,
                 minPoseTrackingConfidence: 0.1,
-                minPresenceConfidence: 0.1
+                minPresenceConfidence: 0.1,
+                outputSegmentationMasks: false,
+                modelComplexity: 0 // LITE MODEL (Speed focus)
             });
 
             this.debugMsg = "LOCAL AI ONLINE.";
@@ -232,9 +235,10 @@ class Game {
 
     processLoop() {
         const loop = () => {
-            const now = performance.now();
+            const start = performance.now();
             if (this.video.readyState >= 2 && this.poseLandmarker && !this.video.paused) {
-                const res = this.poseLandmarker.detectForVideo(this.video, now);
+                const res = this.poseLandmarker.detectForVideo(this.video, start);
+                this.latency = Math.round(performance.now() - start);
                 this.landmarks = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
 
                 if (this.screen === SCREENS.LOBBY && this.landmarks && this.landmarks.length > 0) {
@@ -337,7 +341,7 @@ class Game {
             const rawCount = this.landmarks.length;
             const trailCount = this.trails[15].length; // Check one hand
             this.ctx.fillStyle = 'white';
-            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS | CANVAS: ${this.canvas.width}x${this.canvas.height} | TRAIL BUF: ${trailCount}`, 20, 60);
+            this.ctx.fillText(`AI: ${rawCount} LM | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
             this.drawTrails();
             this.drawSkeleton();
             this.drawBoundingBox();
