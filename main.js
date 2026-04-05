@@ -22,7 +22,7 @@ class Circle {
         this.hit = false;
         this.missed = false;
         this.radius = 60;
-        this.startTime = data.time - 800; // 800ms approach time
+        this.startTime = data.time - 1500; // Increased to 1500ms for better readability
     }
 
     update(currentTime) {
@@ -59,7 +59,7 @@ class Circle {
 
     draw(ctx, currentTime) {
         if (this.hit || this.missed) return;
-        const progress = (currentTime - this.startTime) / 800;
+        const progress = (currentTime - this.startTime) / 1500;
         if (progress < 0) return;
 
         const alpha = Math.min(1, progress * 4);
@@ -98,7 +98,7 @@ class Slider {
         this.game = game;
         this.hit = false; this.missed = false;
         this.radius = 60;
-        this.startTime = data.time - 800;
+        this.startTime = data.time - 1500;
         this.points = data.points || [];
     }
 
@@ -144,7 +144,7 @@ class Slider {
         if (this.hit || this.missed) return;
         const totalDuration = this.data.duration;
         const elapsed = currentTime - this.data.time;
-        const progress = (currentTime - this.startTime) / 800;
+        const progress = (currentTime - this.startTime) / 1500;
         if (progress < 0) return;
 
         ctx.save();
@@ -552,7 +552,7 @@ class Game {
 
             if (foundHover !== -1 && foundHover === this.dwellIdx) {
                 this.dwellTime += 16;
-                if (this.dwellTime >= 1500) {
+                if (this.dwellTime >= 1000) { // Reduced to 1s
                     this.startGame();
                     this.dwellTime = 0;
                 }
@@ -740,8 +740,8 @@ class Game {
                 this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
 
                 // TUNED SENSITIVITY: 10-frame window for snappier swipes
-                const SWIPE_VEL = 0.04;
-                const SWIPE_DIST = 0.1;
+                const SWIPE_VEL = 0.02; // More sensitive
+                const SWIPE_DIST = 0.07; // More sensitive
 
                 if (Math.abs(this.handVelocity[idx].vx) > SWIPE_VEL) {
                     const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
