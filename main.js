@@ -235,10 +235,10 @@ class Game {
 
     processLoop() {
         const loop = () => {
-            const start = performance.now();
+            const now = performance.now();
             if (this.video.readyState >= 2 && this.poseLandmarker && !this.video.paused) {
-                const res = this.poseLandmarker.detectForVideo(this.video, start);
-                this.latency = Math.round(performance.now() - start);
+                const res = this.poseLandmarker.detectForVideo(this.video, now);
+                this.latency = Math.round(performance.now() - now);
                 this.landmarks = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
 
                 if (this.screen === SCREENS.LOBBY && this.landmarks && this.landmarks.length > 0) {
