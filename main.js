@@ -325,11 +325,6 @@ class Game {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         const now = performance.now();
 
-        // HEARTBEAT
-        this.ctx.strokeStyle = '#00ff00';
-        this.ctx.lineWidth = 10;
-        this.ctx.strokeRect(0, 0, this.canvas.width, this.canvas.height);
-
         this.ctx.fillStyle = "#00ff00";
         this.ctx.font = "bold 16px monospace";
         this.ctx.textAlign = "left";
@@ -407,15 +402,15 @@ class Game {
                 const px = (1 - lm.x) * this.canvas.width;
                 const py = lm.y * this.canvas.height;
                 this.trails[idx].unshift({ x: px, y: py });
-                if (this.trails[idx].length > 20) this.trails[idx].pop();
+                if (this.trails[idx].length > 40) this.trails[idx].pop();
             } else {
-                this.trails[idx] = []; // Reset if tracking lost
+                this.trails[idx] = [];
             }
         });
     }
 
     drawTrails() {
-        this.ctx.lineWidth = 10;
+        this.ctx.save();
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
 
@@ -424,22 +419,32 @@ class Game {
             if (history.length < 2) return;
 
             const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
-            this.ctx.shadowBlur = 10;
-            this.ctx.shadowColor = color;
 
-            for (let i = 0; i < history.length - 1; i++) {
-                const p1 = history[i], p2 = history[i + 1];
-                const alpha = 1 - (i / history.length);
-                this.ctx.globalAlpha = alpha * 0.6;
-                this.ctx.strokeStyle = color;
-                this.ctx.beginPath();
-                this.ctx.moveTo(p1.x, p1.y);
-                this.ctx.lineTo(p2.x, p2.y);
-                this.ctx.stroke();
-            }
+            // Pass 1: Outer Glow
+            this.ctx.lineWidth = 20;
+            this.ctx.shadowBlur = 20;
+            this.ctx.shadowColor = color;
+            this.renderPath(history, color, 0.3);
+
+            // Pass 2: Inner Core
+            this.ctx.lineWidth = 8;
+            this.ctx.shadowBlur = 0;
+            this.renderPath(history, '#ffffff', 0.8);
         });
-        this.ctx.globalAlpha = 1.0;
-        this.ctx.shadowBlur = 0;
+        this.ctx.restore();
+    }
+
+    renderPath(history, color, baseAlpha) {
+        for (let i = 0; i < history.length - 1; i++) {
+            const p1 = history[i], p2 = history[i + 1];
+            const alpha = (1 - (i / history.length)) * baseAlpha;
+            this.ctx.globalAlpha = alpha;
+            this.ctx.strokeStyle = color;
+            this.ctx.beginPath();
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.stroke();
+        }
     }
 }
 
