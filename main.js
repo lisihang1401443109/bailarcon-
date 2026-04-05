@@ -423,7 +423,7 @@ class Game {
             const lm = this.smoothLandmarks[idx];
             if (lm) {
                 this.trails[idx].unshift({ x: lm.x, y: lm.y });
-                if (this.trails[idx].length > 100) this.trails[idx].pop();
+                if (this.trails[idx].length > 40) this.trails[idx].pop(); // Shorter trail = faster fade
             } else {
                 this.trails[idx] = [];
             }
@@ -441,16 +441,16 @@ class Game {
 
             const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
 
-            // Pass 1: Massive Outer Glow
+            // Pass 1: Massive Outer Glow - Faster Fade (Power 3)
             this.ctx.lineWidth = 40;
             this.ctx.shadowBlur = 30;
             this.ctx.shadowColor = color;
-            this.renderPath(history, color, 0.4, 2.0); // power 2 for smooth tail
+            this.renderPath(history, color, 0.4, 3.0);
 
-            // Pass 2: Bright Inner Core
+            // Pass 2: Bright Inner Core - Faster Fade (Power 2)
             this.ctx.lineWidth = 12;
             this.ctx.shadowBlur = 0;
-            this.renderPath(history, '#ffffff', 0.8, 1.5);
+            this.renderPath(history, '#ffffff', 0.8, 2.0);
         });
         this.ctx.restore();
     }
