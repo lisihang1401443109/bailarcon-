@@ -355,23 +355,23 @@ class Game {
         this.ctx.lineWidth = 5;
         this.ctx.strokeStyle = '#ff0000'; // High contrast RED
 
-        // Draw Connections - NO VISIBILITY GATES for testing
+        // Draw Connections
         POSE_CONNECTIONS.forEach(([i, j]) => {
             const lm1 = this.landmarks[i], lm2 = this.landmarks[j];
             if (lm1 && lm2) {
                 this.ctx.beginPath();
-                this.ctx.moveTo(lm1.x * this.canvas.width, lm1.y * this.canvas.height);
-                this.ctx.lineTo(lm2.x * this.canvas.width, lm2.y * this.canvas.height);
+                this.ctx.moveTo((1 - lm1.x) * this.canvas.width, lm1.y * this.canvas.height);
+                this.ctx.lineTo((1 - lm2.x) * this.canvas.width, lm2.y * this.canvas.height);
                 this.ctx.stroke();
             }
         });
 
-        // Draw BIG joints
+        // Draw joints
         this.ctx.fillStyle = '#ffff00';
         [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
             if (lm) {
-                const px = lm.x * this.canvas.width;
+                const px = (1 - lm.x) * this.canvas.width;
                 const py = lm.y * this.canvas.height;
                 this.ctx.beginPath(); this.ctx.arc(px, py, 8, 0, Math.PI * 2); this.ctx.fill();
             }
@@ -387,7 +387,7 @@ class Game {
             maxY = Math.max(maxY, lm.y);
         });
 
-        const bx = minX * this.canvas.width;
+        const bx = (1 - maxX) * this.canvas.width;
         const by = minY * this.canvas.height;
         const bw = (maxX - minX) * this.canvas.width;
         const bh = (maxY - minY) * this.canvas.height;
