@@ -311,13 +311,12 @@ class Game {
     }
 
     resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
         if (this.video.videoWidth) {
-            const vA = this.video.videoWidth / this.video.videoHeight;
-            const wA = window.innerWidth / window.innerHeight;
-            if (wA > vA) { this.canvas.width = window.innerHeight * vA; }
-            else { this.canvas.height = window.innerWidth / vA; }
+            this.canvas.width = this.video.videoWidth;
+            this.canvas.height = this.video.videoHeight;
+        } else {
+            this.canvas.width = window.innerWidth;
+            this.canvas.height = window.innerHeight;
         }
     }
 
