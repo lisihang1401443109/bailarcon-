@@ -27,7 +27,31 @@ class Circle {
 
     update(currentTime) {
         if (this.hit || this.missed) return;
-        if (currentTime > this.data.time + 100) { this.missed = true; this.game.handleMiss(); }
+
+        // Expiration Check
+        if (currentTime > this.data.time + 200) {
+            this.missed = true;
+            this.game.handleMiss();
+            return;
+        }
+
+        // Hit Detection Logic: Within timing window
+        const timeDiff = Math.abs(currentTime - this.data.time);
+        if (timeDiff <= 150) {
+            const targetIndices = TARGET_MAP[this.data.target];
+            const isHit = targetIndices.some(idx => {
+                const lm = this.game.smoothLandmarks[idx];
+                if (!lm) return false;
+                const dist = Math.hypot(lm.x - this.data.x, lm.y - this.data.y);
+                return dist < 80; // 80px radius
+            });
+
+            if (isHit) {
+                this.hit = true;
+                const result = timeDiff < 80 ? 'PERFECT' : 'GOOD';
+                this.game.handleHit(result, { x: this.data.x, y: this.data.y });
+            }
+        }
     }
 
     draw(ctx, currentTime) {
@@ -77,7 +101,37 @@ class Slider {
 
     update(currentTime) {
         if (this.hit || this.missed) return;
-        if (currentTime > this.data.time + this.data.duration + 100) { this.missed = true; }
+
+        // Expiration Check
+        if (currentTime > this.data.time + this.data.duration + 200) {
+            this.missed = true;
+            return;
+        }
+
+        // Active State Check (During the slide duration)
+        if (currentTime >= this.data.time && currentTime <= this.data.time + this.data.duration) {
+            const headP = this.getPointAt(currentTime);
+            const targetIndices = TARGET_MAP[this.data.target];
+            const isTouching = targetIndices.some(idx => {
+                const lm = this.game.smoothLandmarks[idx];
+                if (!lm) return false;
+                return Math.hypot(lm.x - headP.x, lm.y - headP.y) < 100; // Larger window for sliders
+            });
+
+            if (isTouching) {
+                // Sliders grant continuous score/combo? 
+                // For now, let's just mark it as "hit" at the end if followed well.
+                this.isCurrentlyTracking = true;
+            } else {
+                this.isCurrentlyTracking = false;
+            }
+        }
+
+        // Final Judgment
+        if (currentTime > this.data.time + this.data.duration) {
+            this.hit = true;
+            this.game.handleHit('PERFECT', { x: 512, y: 384 }); // Default center feedback
+        }
     }
 
     draw(ctx, currentTime) {
@@ -160,6 +214,11 @@ class Game {
         this.activeObjects = [];
         // State
         this.gameStartTime = 0;
+        this.score = 0;
+        this.combo = 0;
+        this.maxCombo = 0;
+        this.hitFeedback = []; // {text, color, x, y, time}
+
         this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
         this.smoothLandmarks = []; // Step 3.1: Global Stabilization
         this.latency = 0; // Step 3: Performance benchmark
@@ -272,38 +331,6 @@ class Game {
 
                     this.activeObjects.forEach(obj => {
                         obj.update(gameTime);
-                        if (!obj.hit && !obj.missed && this.landmarks) {
-                            const indices = TARGET_MAP[obj.data.target] || [];
-
-                            // SCALE COORDINATES from 1000x1000 beatmap space to canvas
-                            const targetX = (obj.data.x / 1000) * this.canvas.width;
-                            const targetY = (obj.data.y / 1000) * this.canvas.height;
-
-                            let currentX = targetX, currentY = targetY;
-                            if (obj.getPointAt) {
-                                const elapsed = gameTime - obj.data.time;
-                                if (elapsed > 0) {
-                                    const ballPos = obj.getPointAt(elapsed / obj.data.duration);
-                                    currentX = (ballPos.x / 1000) * this.canvas.width;
-                                    currentY = (ballPos.y / 1000) * this.canvas.height;
-                                }
-                            }
-
-                            for (let idx of indices) {
-                                const lm = this.landmarks[idx];
-                                if (lm && lm.visibility > 0.1) { // Lowered limit for better feel
-                                    const px = (1 - lm.x) * this.canvas.width;
-                                    const py = lm.y * this.canvas.height;
-                                    const dist = Math.hypot(px - currentX, py - currentY);
-                                    if (dist < obj.radius * 2) {
-                                        if (obj.getPointAt) {
-                                            if (Math.random() < 0.2) this.handleHit(obj, true);
-                                        } else this.handleHit(obj);
-                                        break;
-                                    }
-                                }
-                            }
-                        }
                     });
                     this.activeObjects = this.activeObjects.filter(o => !o.hit && !o.missed);
                 }
@@ -313,17 +340,29 @@ class Game {
         requestAnimationFrame(loop);
     }
 
-    handleHit(obj, isSliderTick = false) {
-        if (!isSliderTick) obj.hit = true;
-        this.score += isSliderTick ? 10 : 300;
-        if (!isSliderTick) { this.combo++; this.hits++; this.totalObjects++; }
-        this.updateHUD();
+    handleHit(result, pos) {
+        if (result === 'PERFECT') this.score += 300 * (1 + this.combo * 0.1);
+        else if (result === 'GOOD') this.score += 100 * (1 + this.combo * 0.1);
+
+        this.combo++;
+        this.maxCombo = Math.max(this.maxCombo, this.combo);
+        this.hitFeedback.push({
+            text: result,
+            color: result === 'PERFECT' ? '#ffff00' : '#00ffff',
+            x: pos.x,
+            y: pos.y,
+            time: Date.now()
+        });
     }
 
     handleMiss() {
         this.combo = 0;
-        this.totalObjects++;
-        this.updateHUD();
+        this.hitFeedback.push({
+            text: "MISS",
+            color: "#ff3333",
+            x: 512, y: 384, // Center for misses
+            time: Date.now()
+        });
     }
 
     updateHUD() {
@@ -367,12 +406,38 @@ class Game {
             this.ctx.fillStyle = 'white';
             this.ctx.fillText(`AI: ${rawCount} LM | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
 
+            // HUD: Score & Combo
+            this.ctx.font = "bold 40px Outfit";
+            this.ctx.textAlign = "right";
+            this.ctx.fillStyle = "white";
+            this.ctx.fillText(Math.floor(this.score).toString().padStart(7, '0'), this.canvas.width - 40, 60);
+            this.ctx.font = "bold 60px Outfit";
+            this.ctx.fillStyle = this.combo > 10 ? "#ffff00" : "white";
+            this.ctx.fillText(`${this.combo}x`, this.canvas.width - 40, 130);
+            this.ctx.textAlign = "left";
+
+            // Hit Feedback
+            this.hitFeedback = this.hitFeedback.filter(f => Date.now() - f.time < 800);
+            this.hitFeedback.forEach(f => {
+                const age = (Date.now() - f.time) / 800;
+                this.ctx.save();
+                this.ctx.globalAlpha = 1 - age;
+                this.ctx.fillStyle = f.color;
+                this.ctx.font = `bold ${30 + (1 - age) * 20}px Outfit`;
+                this.ctx.textAlign = "center";
+                this.ctx.fillText(f.text, f.x, f.y - (age * 50));
+                this.ctx.restore();
+            });
+
+            this.drawTrails();
+            this.drawSkeleton();
+            this.drawBoundingBox();
+
             // Phase 3: Gesture HUD
             const isActive = (Date.now() - this.gestureTime < 1000);
             this.ctx.fillStyle = isActive ? '#00ff00' : '#444444';
             this.ctx.font = "bold 30px monospace";
             this.ctx.fillText(`GESTURE: ${isActive ? this.lastGesture : "NONE"}`, 20, 100);
-
             this.drawTrails();
             this.drawSkeleton();
             this.drawBoundingBox();
