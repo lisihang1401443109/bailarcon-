@@ -403,11 +403,11 @@ class Game {
     updateTrails() {
         [15, 16, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
-            if (lm) { // Nuclear: No visibility gate
+            if (lm) {
                 const px = (1 - lm.x) * this.canvas.width;
                 const py = lm.y * this.canvas.height;
                 this.trails[idx].unshift({ x: px, y: py });
-                if (this.trails[idx].length > 40) this.trails[idx].pop();
+                if (this.trails[idx].length > 60) this.trails[idx].pop();
             } else {
                 this.trails[idx] = [];
             }
@@ -425,24 +425,25 @@ class Game {
 
             const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
 
-            // Pass 1: Outer Glow
-            this.ctx.lineWidth = 20;
-            this.ctx.shadowBlur = 20;
+            // Pass 1: Massive Outer Glow
+            this.ctx.lineWidth = 40;
+            this.ctx.shadowBlur = 30;
             this.ctx.shadowColor = color;
-            this.renderPath(history, color, 0.3);
+            this.renderPath(history, color, 0.4, 2.0); // power 2 for smooth tail
 
-            // Pass 2: Inner Core
-            this.ctx.lineWidth = 8;
+            // Pass 2: Bright Inner Core
+            this.ctx.lineWidth = 12;
             this.ctx.shadowBlur = 0;
-            this.renderPath(history, '#ffffff', 0.8);
+            this.renderPath(history, '#ffffff', 0.8, 1.5);
         });
         this.ctx.restore();
     }
 
-    renderPath(history, color, baseAlpha) {
+    renderPath(history, color, baseAlpha, power = 1) {
         for (let i = 0; i < history.length - 1; i++) {
             const p1 = history[i], p2 = history[i + 1];
-            const alpha = (1 - (i / history.length)) * baseAlpha;
+            // Non-linear fade for smoother "tail"
+            const alpha = Math.pow(1 - (i / history.length), power) * baseAlpha;
             this.ctx.globalAlpha = alpha;
             this.ctx.strokeStyle = color;
             this.ctx.beginPath();
