@@ -294,7 +294,8 @@ class Game {
             });
 
             this.debugMsg = "LOCAL AI ONLINE.";
-            this.screen = SCREENS.APP_START;
+            this.screen = SCREENS.LOBBY;
+            console.log("INITIALIZED: ENTERING LOBBY");
             this.startScreen.style.display = 'none';
             this.processLoop();
         } catch (err) {
@@ -319,7 +320,7 @@ class Game {
     startActualGameplay() {
         this.screen = SCREENS.PLAYING;
         this.gameStartTime = performance.now();
-        console.log("GAMEPLAY STARTED");
+        console.log("STAGE START - GAMEPLAY ACTIVE");
     }
 
     processLoop() {
@@ -332,14 +333,6 @@ class Game {
 
                 if (this.landmarks) {
                     this.detectGestures();
-                }
-
-                if (this.screen === SCREENS.APP_START) {
-                    this.updatePreStartLogic(); // Reuse prestart logic for app start too
-                    if (this.screen === SCREENS.COUNTDOWN) { // It transitioned
-                        this.screen = SCREENS.LOBBY; // But we want lobby first
-                        this.preStartHoldTime = 0;
-                    }
                 }
 
                 if (this.screen === SCREENS.LOBBY) {
@@ -357,7 +350,8 @@ class Game {
                 if (this.screen === SCREENS.PLAYING) {
                     const gameTime = now - this.gameStartTime;
 
-                    while (this.objects.length > 0 && (this.objects[0].startTime || 0) <= gameTime) {
+                    // Spawn new objects (800ms lead time)
+                    while (this.objects.length > 0 && this.objects[0].data.time <= gameTime + 800) {
                         this.activeObjects.push(this.objects.shift());
                     }
 
@@ -424,6 +418,7 @@ class Game {
             if (inLeft && inRight) {
                 this.preStartHoldTime += 16;
                 if (this.preStartHoldTime >= 2000) {
+                    console.log("HANDS CONFIRMED: ENTERING COUNTDOWN");
                     this.screen = SCREENS.COUNTDOWN;
                     this.countdownStartTime = performance.now();
                 }
@@ -522,18 +517,10 @@ class Game {
             if (this.screen === SCREENS.PLAYING) {
                 const gameTime = now - this.gameStartTime;
 
-                // Spawn new objects (800ms lead time)
-                while (this.objects.length > 0 && this.objects[0].data.time <= gameTime + 800) {
-                    this.activeObjects.push(this.objects.shift());
-                }
-
-                // Update and Draw active objects
+                // Draw active objects
                 this.activeObjects.forEach(obj => {
-                    obj.update(gameTime);
                     obj.draw(this.ctx, gameTime);
                 });
-
-                this.activeObjects = this.activeObjects.filter(o => !o.hit && !o.missed);
 
                 // Completion Check
                 if (gameTime > this.lastObjectTime + 1500) {
