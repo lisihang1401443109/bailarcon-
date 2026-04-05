@@ -159,6 +159,7 @@ class Game {
         this.objects = [];
         this.activeObjects = [];
         this.gameStartTime = 0;
+        this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
         this.init();
@@ -337,9 +338,11 @@ class Game {
         this.ctx.fillText(`${this.debugMsg} | VIDEO: ${vState} (${vTime}s) | SCREEN: ${this.screen.toUpperCase()}`, 20, 30);
 
         if (this.landmarks) {
+            this.updateTrails();
             const rawCount = this.landmarks.length;
             this.ctx.fillStyle = 'white';
             this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS | CANVAS: ${this.canvas.width}x${this.canvas.height}`, 20, 60);
+            this.drawTrails();
             this.drawSkeleton();
             this.drawBoundingBox();
         } else {
