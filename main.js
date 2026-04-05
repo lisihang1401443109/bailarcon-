@@ -340,7 +340,7 @@ class Game {
         if (this.landmarks) {
             const rawCount = this.landmarks.length;
             this.ctx.fillStyle = 'white';
-            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS DETECTED`, 20, 60);
+            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS | CANVAS: ${this.canvas.width}x${this.canvas.height}`, 20, 60);
             this.drawSkeleton();
             this.drawBoundingBox();
         } else {
@@ -361,8 +361,8 @@ class Game {
             const lm1 = this.landmarks[i], lm2 = this.landmarks[j];
             if (lm1 && lm2) {
                 this.ctx.beginPath();
-                this.ctx.moveTo((1 - lm1.x) * this.canvas.width, lm1.y * this.canvas.height);
-                this.ctx.lineTo((1 - lm2.x) * this.canvas.width, lm2.y * this.canvas.height);
+                this.ctx.moveTo(lm1.x * this.canvas.width, lm1.y * this.canvas.height);
+                this.ctx.lineTo(lm2.x * this.canvas.width, lm2.y * this.canvas.height);
                 this.ctx.stroke();
             }
         });
@@ -372,7 +372,7 @@ class Game {
         [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
             if (lm) {
-                const px = (1 - lm.x) * this.canvas.width;
+                const px = lm.x * this.canvas.width;
                 const py = lm.y * this.canvas.height;
                 this.ctx.beginPath(); this.ctx.arc(px, py, 8, 0, Math.PI * 2); this.ctx.fill();
             }
@@ -388,7 +388,7 @@ class Game {
             maxY = Math.max(maxY, lm.y);
         });
 
-        const bx = (1 - maxX) * this.canvas.width;
+        const bx = minX * this.canvas.width;
         const by = minY * this.canvas.height;
         const bw = (maxX - minX) * this.canvas.width;
         const bh = (maxY - minY) * this.canvas.height;
