@@ -339,7 +339,8 @@ class Game {
                 this.latency = Math.round(performance.now() - now);
                 this.landmarks = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
 
-                if (this.landmarks) {
+                // Only detect gestures in non-gameplay screens
+                if (this.landmarks && this.screen !== SCREENS.PLAYING) {
                     this.detectGestures();
                 }
 
@@ -375,10 +376,7 @@ class Game {
                 }
 
                 if (this.screen === SCREENS.RESULTS) {
-                    if (this.lastGesture === "SWIPE RIGHT") {
-                        this.screen = SCREENS.LOBBY;
-                        this.lastGesture = "NONE";
-                    }
+                    this.updateResultsLogic();
                 }
             }
             requestAnimationFrame(loop);
@@ -510,6 +508,8 @@ class Game {
     }
 
     animate() {
+        // RESET TRANSFORM to ensure fixed-coordinate UI (like debug text) doesn't scale
+        this.ctx.setTransform(1, 0, 0, 1, 0, 0);
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
         const now = performance.now();
 
@@ -873,30 +873,99 @@ class Game {
         this.ctx.restore();
     }
 
-    drawResults() {
-        const cx = this.canvas.width / 2;
-        const cy = this.canvas.height / 2;
+    updateResultsLogic() {
+        const rh = this.smoothLandmarks[16];
+        if (!rh) return;
 
-        this.ctx.fillStyle = "rgba(0,0,0,0.8)";
+        const frame = this.getUserFrame();
+        const buttonWidth = frame.scale * 0.3;
+        const buttonHeight = 60;
+        const spacing = 20;
+
+        // Two buttons: RETRY and RETURN
+        const buttons = [
+            { id: 'RETRY', label: "RETRY STAGE", y: frame.y + 100 },
+            { id: 'RETURN', label: "BACK TO LOBBY", y: frame.y + 180 }
+        ];
+
+        let foundHover = -1;
+        buttons.forEach((btn, i) => {
+            const bx = frame.x - (buttonWidth / 2);
+            if (rh.x > bx && rh.x < bx + buttonWidth && rh.y > btn.y && rh.y < btn.y + buttonHeight) {
+                foundHover = i;
+            }
+        });
+
+        if (foundHover !== -1 && foundHover === this.resultDwellIdx) {
+            const now = performance.now();
+            if (!this.resultDwellStart) this.resultDwellStart = now;
+            if (now - this.resultDwellStart >= 800) {
+                const action = buttons[foundHover].id;
+                if (action === 'RETRY') this.startGame();
+                else if (action === 'RETURN') this.screen = SCREENS.LOBBY;
+
+                this.resultDwellStart = null;
+                this.resultDwellIdx = -1;
+                console.log("RESULTS ACTION:", action);
+            }
+        } else {
+            this.resultDwellIdx = foundHover;
+            this.resultDwellStart = null;
+        }
+    }
+
+    drawResults() {
+        const frame = this.getUserFrame();
+        const cx = frame.x;
+        const cy = frame.y;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.85)";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.ctx.textAlign = "center";
         this.ctx.fillStyle = "#00ffff";
-        this.ctx.font = "bold 60px Outfit";
-        this.ctx.fillText("STAGE CLEAR", cx, cy - 200);
+        this.ctx.font = `bold ${frame.scale * 0.06}px Outfit`;
+        this.ctx.fillText("STAGE CLEAR", cx, cy - (frame.scale * 0.2));
 
         this.ctx.fillStyle = "white";
-        this.ctx.font = "bold 100px Outfit";
-        this.ctx.fillText(Math.floor(this.score).toString(), cx, cy - 50);
+        this.ctx.font = `bold ${frame.scale * 0.12}px Outfit`;
+        this.ctx.fillText(Math.floor(this.score).toString(), cx, cy - (frame.scale * 0.05));
 
-        this.ctx.font = "bold 30px Outfit";
+        this.ctx.font = `bold ${frame.scale * 0.03}px Outfit`;
         this.ctx.fillStyle = "#aaaaaa";
-        this.ctx.fillText(`MAX COMBO: ${this.maxCombo}`, cx, cy + 50);
-        this.ctx.fillText(`ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, cx, cy + 100);
+        this.ctx.fillText(`MAX COMBO: ${this.maxCombo} | ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, cx, cy + (frame.scale * 0.05));
 
-        this.ctx.fillStyle = "#00ff00";
-        this.ctx.font = "bold 24px Outfit";
-        this.ctx.fillText("SWIPE RIGHT TO RETURN TO LOBBY", cx, cy + 250);
+        // Draw Menu Buttons
+        const buttonWidth = frame.scale * 0.3;
+        const buttonHeight = 60;
+        const buttons = [
+            { id: 'RETRY', label: "RETRY STAGE", y: cy + 100 },
+            { id: 'RETURN', label: "BACK TO LOBBY", y: cy + 180 }
+        ];
+
+        buttons.forEach((btn, i) => {
+            const isHovered = i === this.resultDwellIdx;
+            const bx = cx - (buttonWidth / 2);
+
+            this.ctx.fillStyle = isHovered ? "rgba(0, 255, 255, 0.3)" : "rgba(255, 255, 255, 0.1)";
+            this.ctx.strokeStyle = isHovered ? "#00ffff" : "rgba(255,255,255,0.3)";
+            this.ctx.lineWidth = 2;
+
+            this.ctx.beginPath();
+            this.ctx.roundRect ? this.ctx.roundRect(bx, btn.y, buttonWidth, buttonHeight, 10) : this.ctx.rect(bx, btn.y, buttonWidth, buttonHeight);
+            this.ctx.fill(); this.ctx.stroke();
+
+            this.ctx.fillStyle = "white";
+            this.ctx.font = "bold 20px Outfit";
+            this.ctx.fillText(btn.label, cx, btn.y + 38);
+
+            // Progress Bar if hovering
+            if (isHovered && this.resultDwellStart) {
+                const p = Math.min(1, (performance.now() - this.resultDwellStart) / 800);
+                this.ctx.fillStyle = "rgba(0, 255, 255, 0.5)";
+                this.ctx.fillRect(bx, btn.y + buttonHeight - 4, buttonWidth * p, 4);
+            }
+        });
 
         this.ctx.textAlign = "left";
     }
