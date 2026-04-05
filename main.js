@@ -448,7 +448,7 @@ class Game {
     }
 
     detectGestures() {
-        const hands = [15, 16];
+        const hands = [16]; // Focus ONLY on the Right Hand
         hands.forEach(idx => {
             const lm = this.landmarks[idx];
             if (!lm) return;
