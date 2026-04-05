@@ -39,8 +39,7 @@ class Circle {
         const timeDiff = Math.abs(currentTime - this.data.time);
         if (timeDiff <= 150) {
             const targetIndices = TARGET_MAP[this.data.target];
-            const targetX = (this.data.x / 1000) * this.game.canvas.width;
-            const targetY = (this.data.y / 1000) * this.game.canvas.height;
+            const { x: targetX, y: targetY } = this.game.getRelativePos(this.data.x, this.data.y);
 
             const isHit = targetIndices.some(idx => {
                 const lm = this.game.smoothLandmarks[idx];
@@ -75,8 +74,7 @@ class Circle {
         ctx.lineWidth = 5;
 
         // SCALE DRAWING COORDINATES
-        const cx = (this.data.x / 1000) * this.game.canvas.width;
-        const cy = (this.data.y / 1000) * this.game.canvas.height;
+        const { x: cx, y: cy } = this.game.getRelativePos(this.data.x, this.data.y);
 
         ctx.beginPath();
         ctx.arc(cx, cy, this.radius, 0, Math.PI * 2);
@@ -114,8 +112,7 @@ class Slider {
         // Active State Check (During the slide duration)
         if (currentTime >= this.data.time && currentTime <= this.data.time + this.data.duration) {
             const headP = this.getPointAt(currentTime);
-            const targetX = (headP.x / 1000) * this.game.canvas.width;
-            const targetY = (headP.y / 1000) * this.game.canvas.height;
+            const { x: targetX, y: targetY } = this.game.getRelativePos(headP.x, headP.y);
 
             const targetIndices = TARGET_MAP[this.data.target];
             const isTouching = targetIndices.some(idx => {
@@ -158,9 +155,11 @@ class Slider {
         // Draw Path
         if (this.points.length > 1) {
             ctx.beginPath();
-            ctx.moveTo((this.points[0].x / 1000) * this.game.canvas.width, (this.points[0].y / 1000) * this.game.canvas.height);
+            const startP = this.game.getRelativePos(this.points[0].x, this.points[0].y);
+            ctx.moveTo(startP.x, startP.y);
             for (let i = 1; i < this.points.length; i++) {
-                ctx.lineTo((this.points[i].x / 1000) * this.game.canvas.width, (this.points[i].y / 1000) * this.game.canvas.height);
+                const p = this.game.getRelativePos(this.points[i].x, this.points[i].y);
+                ctx.lineTo(p.x, p.y);
             }
             ctx.stroke();
         }
@@ -168,8 +167,7 @@ class Slider {
         // Draw Ball
         if (elapsed > 0 && elapsed < totalDuration) {
             const ballPosRaw = this.getPointAt(elapsed / totalDuration);
-            const bx = (ballPosRaw.x / 1000) * this.game.canvas.width;
-            const by = (ballPosRaw.y / 1000) * this.game.canvas.height;
+            const { x: bx, y: by } = this.game.getRelativePos(ballPosRaw.x, ballPosRaw.y);
             ctx.fillStyle = color;
             ctx.beginPath(); ctx.arc(bx, by, this.radius, 0, Math.PI * 2); ctx.fill();
         }
@@ -178,8 +176,7 @@ class Slider {
         if (elapsed < 0) {
             const approachRadius = this.radius * (1 + 2 * (1 - progress));
             ctx.lineWidth = 2;
-            const ax = (this.points[0].x / 1000) * this.game.canvas.width;
-            const ay = (this.points[0].y / 1000) * this.game.canvas.height;
+            const { x: ax, y: ay } = this.game.getRelativePos(this.points[0].x, this.points[0].y);
             ctx.beginPath(); ctx.arc(ax, ay, Math.max(this.radius, approachRadius), 0, Math.PI * 2); ctx.stroke();
         }
         ctx.restore();

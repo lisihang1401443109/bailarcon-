@@ -45,16 +45,6 @@ export const sampleBeatmap = {
 
 export const tutorialObjects = [
     { id: 1, type: 'circle', time: 2000, x: 500, y: 300, target: 'HAND' },
-    { id: 2, type: 'circle', time: 4000, x: 200, y: 500, target: 'HAND' },
-    { id: 3, type: 'circle', time: 6000, x: 800, y: 500, target: 'HAND' },
-    {
-        id: 4, type: 'slider', time: 8000, duration: 3000, target: 'HAND',
-        points: [{ x: 500, y: 200 }, { x: 500, y: 800 }]
-    }
-];
-
-export const tutorialObjects = [
-    { id: 1, type: 'circle', time: 2000, x: 500, y: 300, target: 'HAND' },
     { id: 2, type: 'circle', time: 4000, x: 300, y: 400, target: 'HAND' },
     { id: 3, type: 'circle', time: 6000, x: 700, y: 400, target: 'HAND' },
     {
