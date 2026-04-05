@@ -414,66 +414,106 @@ class Game {
     }
 
     updateMenuLogic() {
-        if (this.lastGesture === "SWIPE DOWN") {
+        if (this.lastGesture === "SWIPE LEFT") { // Moving toward higher index
             this.selectedMapIdx = Math.min(this.selectedMapIdx + 1, this.maps.length - 1);
-            this.lastGesture = "NONE"; // Consume
+            this.lastGesture = "NONE";
         }
-        if (this.lastGesture === "SWIPE UP") {
+        if (this.lastGesture === "SWIPE RIGHT") { // Moving toward lower index
             this.selectedMapIdx = Math.max(this.selectedMapIdx - 1, 0);
             this.lastGesture = "NONE";
         }
 
-        // Dwell Logic
+        // Dwell Logic: Check which box is hovered
         const rh = this.smoothLandmarks[16];
         if (rh) {
-            // Check if hand is in the "Selected Map" zone (Center of screen)
-            const menuX = this.canvas.width * 0.1, menuY = this.canvas.height * 0.3;
-            const menuW = this.canvas.width * 0.4, menuH = 400; // Total list height
+            let foundHover = -1;
+            const cardWidth = 300;
+            const spacing = 40;
+            const centerX = this.canvas.width / 2;
+            const startX = centerX - (this.selectedMapIdx * (cardWidth + spacing));
 
-            // Simplified: Hand must be on the left half to select
-            if (rh.x < this.canvas.width * 0.5) {
-                this.dwellTime += 16; // Approx 60fps increment
+            this.maps.forEach((map, i) => {
+                const itemX = startX + (i * (cardWidth + spacing));
+                const itemY = this.canvas.height / 2 - 100;
+
+                if (rh.x > itemX && rh.x < itemX + cardWidth && rh.y > itemY && rh.y < itemY + 200) {
+                    foundHover = i;
+                }
+            });
+
+            if (foundHover !== -1 && foundHover === this.dwellIdx) {
+                this.dwellTime += 16;
                 if (this.dwellTime >= 1500) {
                     this.startGame();
                     this.dwellTime = 0;
                 }
             } else {
+                this.dwellIdx = foundHover;
                 this.dwellTime = 0;
             }
         }
     }
 
     drawMenu() {
-        const x = this.canvas.width * 0.05;
-        let y = this.canvas.height * 0.2;
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        const cardWidth = 300;
+        const cardHeight = 200;
+        const spacing = 40;
 
-        this.ctx.fillStyle = "rgba(0,0,0,0.5)";
-        this.ctx.roundRect ? this.ctx.roundRect(x - 10, y - 50, 450, 500, 20) : this.ctx.fillRect(x - 10, y - 50, 450, 500);
-        this.ctx.fill();
+        // Smooth horizontal scrolling (interpolating toward target index)
+        if (this.currentScroll === undefined) this.currentScroll = this.selectedMapIdx;
+        this.currentScroll += (this.selectedMapIdx - this.currentScroll) * 0.1;
 
-        this.ctx.font = "bold 24px Outfit";
+        const startX = centerX - (this.currentScroll * (cardWidth + spacing)) - (cardWidth / 2);
+
         this.ctx.fillStyle = "white";
-        this.ctx.fillText("SELECT MAP (SWIPE UP/DOWN)", x, y - 20);
+        this.ctx.font = "bold 32px Outfit";
+        this.ctx.textAlign = "center";
+        this.ctx.fillText("SWIPE LEFT/RIGHT TO BROWSE | HOVER TO SELECT", centerX, centerY - 250);
+        this.ctx.textAlign = "left";
 
         this.maps.forEach((map, i) => {
             const isSelected = i === this.selectedMapIdx;
-            const itemY = y + (i * 80);
+            const isHovered = i === this.dwellIdx;
+            const itemX = startX + (i * (cardWidth + spacing));
+            const itemY = centerY - 100;
+
+            // Distance Fade
+            const distFromCenter = Math.abs(centerX - (itemX + cardWidth / 2));
+            const opacity = Math.max(0.2, 1 - (distFromCenter / (this.canvas.width / 2)));
+
+            this.ctx.save();
+            this.ctx.globalAlpha = opacity;
 
             // Card BG
-            this.ctx.fillStyle = isSelected ? "rgba(0, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.05)";
-            this.ctx.strokeStyle = isSelected ? "#00ffff" : "rgba(255,255,255,0.2)";
-            this.ctx.lineWidth = isSelected ? 4 : 1;
+            this.ctx.fillStyle = isHovered ? "rgba(0, 255, 255, 0.3)" : "rgba(255, 255, 255, 0.1)";
+            this.ctx.strokeStyle = isSelected ? "#00ffff" : "rgba(255,255,255,0.3)";
+            this.ctx.lineWidth = isSelected ? 5 : 2;
+
+            if (isSelected) {
+                this.ctx.shadowBlur = 20;
+                this.ctx.shadowColor = "#00ffff";
+            }
 
             this.ctx.beginPath();
-            this.ctx.roundRect ? this.ctx.roundRect(x, itemY, 400, 70, 10) : this.ctx.rect(x, itemY, 400, 70);
+            this.ctx.roundRect ? this.ctx.roundRect(itemX, itemY, cardWidth, cardHeight, 20) : this.ctx.rect(itemX, itemY, cardWidth, cardHeight);
             this.ctx.fill(); this.ctx.stroke();
 
             // Text
             this.ctx.fillStyle = isSelected ? "#00ffff" : "white";
-            this.ctx.font = "bold 20px Outfit";
-            this.ctx.fillText(map.title, x + 20, itemY + 30);
-            this.ctx.font = "14px Outfit";
-            this.ctx.fillText(`${map.difficulty} | ${map.bpm} BPM`, x + 20, itemY + 55);
+            this.ctx.font = "bold 24px Outfit";
+            this.ctx.fillText(map.title, itemX + 20, itemY + 50);
+
+            this.ctx.font = "16px Outfit";
+            this.ctx.fillText(map.artist, itemX + 20, itemY + 80);
+
+            this.ctx.fillStyle = isSelected ? "#00ffff" : "#aaaaaa";
+            this.ctx.font = "bold 18px Outfit";
+            this.ctx.fillText(`${map.difficulty}`, itemX + 20, itemY + 140);
+            this.ctx.fillText(`${map.bpm} BPM`, itemX + 20, itemY + 170);
+
+            this.ctx.restore();
         });
 
         // Dwell Progress Ring around Right Hand
@@ -481,24 +521,22 @@ class Game {
         if (rh && this.dwellTime > 0) {
             const progress = this.dwellTime / 1500;
             this.ctx.beginPath();
-            this.ctx.arc(rh.x, rh.y, 40, 0, Math.PI * 2);
-            this.ctx.strokeStyle = "rgba(255,255,255,0.3)";
-            this.ctx.lineWidth = 5;
+            this.ctx.arc(rh.x, rh.y, 50, 0, Math.PI * 2);
+            this.ctx.strokeStyle = "rgba(255,255,255,0.4)";
+            this.ctx.lineWidth = 6;
             this.ctx.stroke();
 
             this.ctx.beginPath();
-            this.ctx.arc(rh.x, rh.y, 40, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
+            this.ctx.arc(rh.x, rh.y, 50, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
             this.ctx.strokeStyle = "#00ff00";
-            this.ctx.lineWidth = 5;
+            this.ctx.lineWidth = 6;
             this.ctx.stroke();
 
-            if (progress > 0.1) {
-                this.ctx.fillStyle = "white";
-                this.ctx.font = "bold 12px Outfit";
-                this.ctx.textAlign = "center";
-                this.ctx.fillText("HOLDING", rh.x, rh.y + 5);
-                this.ctx.textAlign = "left";
-            }
+            this.ctx.fillStyle = "white";
+            this.ctx.font = "bold 14px Outfit";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText(Math.round(progress * 100) + "%", rh.x, rh.y + 7);
+            this.ctx.textAlign = "left";
         }
     }
 
