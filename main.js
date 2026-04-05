@@ -160,7 +160,7 @@ class Game {
         this.activeObjects = [];
         this.gameStartTime = 0;
         this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
-        this.smoothPoints = { 15: null, 16: null, 27: null, 28: null }; // Step 2.1: Lerp targets
+        this.smoothLandmarks = []; // Step 3.1: Global Stabilization
         this.latency = 0; // Step 3: Performance benchmark
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
@@ -338,7 +338,8 @@ class Game {
         this.ctx.fillText(`${this.debugMsg} | VIDEO: ${vState} (${vTime}s) | SCREEN: ${this.screen.toUpperCase()}`, 20, 30);
 
         if (this.landmarks) {
-            this.updateTrails(); // Now sampled in high-frequency animate loop
+            this.stabilizeSkeleton();
+            this.updateTrails();
             const rawCount = this.landmarks.length;
             const trailCount = this.trails[15].length;
             this.ctx.fillStyle = 'white';
@@ -347,6 +348,7 @@ class Game {
             this.drawSkeleton();
             this.drawBoundingBox();
         } else {
+            this.smoothLandmarks = []; // Reset if tracking lost
             this.ctx.fillStyle = '#ff00ff';
             this.ctx.font = "bold 20px monospace";
             this.ctx.textAlign = "center";
@@ -359,71 +361,71 @@ class Game {
         this.ctx.lineWidth = 5;
         this.ctx.strokeStyle = '#ff0000'; // High contrast RED
 
-        // Draw Connections
+        // Use STABILIZED landmarks
+        const lms = this.smoothLandmarks;
+        if (lms.length < 33) return;
+
         POSE_CONNECTIONS.forEach(([i, j]) => {
-            const lm1 = this.landmarks[i], lm2 = this.landmarks[j];
+            const lm1 = lms[i], lm2 = lms[j];
             if (lm1 && lm2) {
                 this.ctx.beginPath();
-                this.ctx.moveTo((1 - lm1.x) * this.canvas.width, lm1.y * this.canvas.height);
-                this.ctx.lineTo((1 - lm2.x) * this.canvas.width, lm2.y * this.canvas.height);
+                this.ctx.moveTo(lm1.x, lm1.y);
+                this.ctx.lineTo(lm2.x, lm2.y);
                 this.ctx.stroke();
             }
         });
 
-        // Draw joints
         this.ctx.fillStyle = '#ffff00';
         [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(idx => {
-            const lm = this.landmarks[idx];
+            const lm = lms[idx];
             if (lm) {
-                const px = (1 - lm.x) * this.canvas.width;
-                const py = lm.y * this.canvas.height;
-                this.ctx.beginPath(); this.ctx.arc(px, py, 8, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.beginPath(); this.ctx.arc(lm.x, lm.y, 8, 0, Math.PI * 2); this.ctx.fill();
             }
         });
     }
 
     drawBoundingBox() {
-        let minX = 1, minY = 1, maxX = 0, maxY = 0;
-        this.landmarks.forEach(lm => {
+        if (this.smoothLandmarks.length < 33) return;
+        let minX = this.canvas.width, minY = this.canvas.height, maxX = 0, maxY = 0;
+        this.smoothLandmarks.forEach(lm => {
             minX = Math.min(minX, lm.x);
             minY = Math.min(minY, lm.y);
             maxX = Math.max(maxX, lm.x);
             maxY = Math.max(maxY, lm.y);
         });
 
-        const bx = (1 - maxX) * this.canvas.width;
-        const by = minY * this.canvas.height;
-        const bw = (maxX - minX) * this.canvas.width;
-        const bh = (maxY - minY) * this.canvas.height;
-
         this.ctx.strokeStyle = 'white';
         this.ctx.lineWidth = 2;
-        this.ctx.strokeRect(bx, by, bw, bh);
+        this.ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    stabilizeSkeleton() {
+        const LERP = 0.25; // Smoothing factor
+        if (!this.landmarks) return;
+
+        if (this.smoothLandmarks.length < 33) {
+            this.smoothLandmarks = this.landmarks.map(lm => ({
+                x: (1 - lm.x) * this.canvas.width,
+                y: lm.y * this.canvas.height
+            }));
+        } else {
+            for (let i = 0; i < 33; i++) {
+                const targetX = (1 - this.landmarks[i].x) * this.canvas.width;
+                const targetY = this.landmarks[i].y * this.canvas.height;
+                this.smoothLandmarks[i].x += (targetX - this.smoothLandmarks[i].x) * LERP;
+                this.smoothLandmarks[i].y += (targetY - this.smoothLandmarks[i].y) * LERP;
+            }
+        }
     }
 
     updateTrails() {
-        const LERP_FACTOR = 0.4; // Smoothness vs Latency (0.1 = heavy lag, 0.9 = stiff)
-
         [15, 16, 27, 28].forEach(idx => {
-            const lm = this.landmarks[idx];
+            const lm = this.smoothLandmarks[idx];
             if (lm) {
-                const targetX = (1 - lm.x) * this.canvas.width;
-                const targetY = lm.y * this.canvas.height;
-
-                // Initialize smooth point if null
-                if (!this.smoothPoints[idx]) {
-                    this.smoothPoints[idx] = { x: targetX, y: targetY };
-                }
-
-                // Interpolate toward AI target
-                this.smoothPoints[idx].x += (targetX - this.smoothPoints[idx].x) * LERP_FACTOR;
-                this.smoothPoints[idx].y += (targetY - this.smoothPoints[idx].y) * LERP_FACTOR;
-
-                this.trails[idx].unshift({ x: this.smoothPoints[idx].x, y: this.smoothPoints[idx].y });
-                if (this.trails[idx].length > 100) this.trails[idx].pop(); // More points for longer trails
+                this.trails[idx].unshift({ x: lm.x, y: lm.y });
+                if (this.trails[idx].length > 100) this.trails[idx].pop();
             } else {
                 this.trails[idx] = [];
-                this.smoothPoints[idx] = null;
             }
         });
     }
