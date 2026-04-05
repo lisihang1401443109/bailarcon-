@@ -43,10 +43,20 @@ export const sampleBeatmap = {
     ]
 };
 
+export const tutorialObjects = [
+    { id: 1, type: 'circle', time: 2000, x: 500, y: 300, target: 'HAND' },
+    { id: 2, type: 'circle', time: 4000, x: 200, y: 500, target: 'HAND' },
+    { id: 3, type: 'circle', time: 6000, x: 800, y: 500, target: 'HAND' },
+    {
+        id: 4, type: 'slider', time: 8000, duration: 3000, target: 'HAND',
+        points: [{ x: 500, y: 200 }, { x: 500, y: 800 }]
+    }
+];
+
 export const maps = [
-    { id: 'neon', title: "NEON DANCE", artist: "Digital Spirit", difficulty: "HARD", bpm: 128 },
-    { id: 'zenith', title: "ZENITH REACH", artist: "Cyber Dream", difficulty: "INSANE", bpm: 160 },
-    { id: 'pulse', title: "PULSE WAVE", artist: "Neon Heart", difficulty: "EXPERT", bpm: 145 },
-    { id: 'electro', title: "ELECTRO SHOCK", artist: "Volt Rider", difficulty: "NORMAL", bpm: 110 },
-    { id: 'void', title: "VOID RUNNER", artist: "Deep Space", difficulty: "IMPOSSIBLE", bpm: 180 }
+    { id: 'tutorial', title: "TUTORIAL", artist: "BailarCon", difficulty: "EASY", bpm: 80, objects: tutorialObjects },
+    { id: 'neon', title: "NEON DANCE", artist: "Digital Spirit", difficulty: "HARD", bpm: 128, objects: sampleBeatmap.objects },
+    { id: 'zenith', title: "ZENITH REACH", artist: "Cyber Dream", difficulty: "INSANE", bpm: 160, objects: sampleBeatmap.objects },
+    { id: 'pulse', title: "PULSE WAVE", artist: "Neon Heart", difficulty: "EXPERT", bpm: 145, objects: sampleBeatmap.objects },
+    { id: 'electro', title: "ELECTRO SHOCK", artist: "Volt Rider", difficulty: "NORMAL", bpm: 110, objects: sampleBeatmap.objects }
 ];
