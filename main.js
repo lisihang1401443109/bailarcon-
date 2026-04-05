@@ -399,6 +399,49 @@ class Game {
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(bx, by, bw, bh);
     }
+
+    updateTrails() {
+        [15, 16, 27, 28].forEach(idx => {
+            const lm = this.landmarks[idx];
+            if (lm && lm.visibility > 0.1) {
+                const px = (1 - lm.x) * this.canvas.width;
+                const py = lm.y * this.canvas.height;
+                this.trails[idx].unshift({ x: px, y: py });
+                if (this.trails[idx].length > 20) this.trails[idx].pop();
+            } else {
+                this.trails[idx] = []; // Reset if tracking lost
+            }
+        });
+    }
+
+    drawTrails() {
+        this.ctx.lineWidth = 10;
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        [15, 16, 27, 28].forEach(idx => {
+            const history = this.trails[idx];
+            if (history.length < 2) return;
+
+            const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
+            this.ctx.shadowBlur = 10;
+            this.ctx.shadowColor = color;
+
+            for (let i = 0; i < history.length - 1; i++) {
+                const p1 = history[i], p2 = history[i + 1];
+                const alpha = 1 - (i / history.length);
+                this.ctx.globalAlpha = alpha * 0.6;
+                this.ctx.strokeStyle = color;
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.stroke();
+            }
+        });
+        this.ctx.globalAlpha = 1.0;
+        this.ctx.shadowBlur = 0;
+    }
+}
 }
 
 new Game();
