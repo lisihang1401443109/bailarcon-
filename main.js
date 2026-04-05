@@ -391,6 +391,32 @@ class Game {
         if (this.accuracyEl) this.accuracyEl.textContent = acc + "%";
     }
 
+    getRelativePos(bx, by) {
+        // Fallback to screen mapping if no body detected or AI not yet stable
+        if (!this.smoothLandmarks || this.smoothLandmarks.length < 33) {
+            return { x: (bx / 1000) * this.canvas.width, y: (by / 1000) * this.canvas.height };
+        }
+
+        // Center = Midpoint of shoulders and hips for a stable core origin
+        const sMidX = (this.smoothLandmarks[11].x + this.smoothLandmarks[12].x) / 2;
+        const sMidY = (this.smoothLandmarks[11].y + this.smoothLandmarks[12].y) / 2;
+        const hMidX = (this.smoothLandmarks[23].x + this.smoothLandmarks[24].x) / 2;
+        const hMidY = (this.smoothLandmarks[23].y + this.smoothLandmarks[24].y) / 2;
+
+        const centerX = (sMidX + hMidX) / 2;
+        const centerY = (sMidY + hMidY) / 2;
+
+        // Scale = Shoulder width * 4.5 (represents comfortable reach zone)
+        const sWidth = Math.hypot(this.smoothLandmarks[11].x - this.smoothLandmarks[12].x, this.smoothLandmarks[11].y - this.smoothLandmarks[12].y);
+        const reachScale = sWidth * 4.5;
+
+        // Translate 0-1000 beatmap space to Body-Relative Pixel Space
+        return {
+            x: centerX + (bx - 500) * (reachScale / 1000),
+            y: centerY + (by - 500) * (reachScale / 1000)
+        };
+    }
+
     resize() {
         if (this.video.videoWidth) {
             this.canvas.width = this.video.videoWidth;
