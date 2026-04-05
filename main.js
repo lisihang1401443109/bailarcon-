@@ -426,6 +426,28 @@ class Game {
                 this.drawResults();
             }
 
+            if (this.screen === SCREENS.PLAYING) {
+                const gameTime = now - this.gameStartTime;
+
+                // Spawn new objects (800ms lead time)
+                while (this.objects.length > 0 && this.objects[0].data.time <= gameTime + 800) {
+                    this.activeObjects.push(this.objects.shift());
+                }
+
+                // Update and Draw active objects
+                this.activeObjects.forEach(obj => {
+                    obj.update(gameTime);
+                    obj.draw(this.ctx, gameTime);
+                });
+
+                this.activeObjects = this.activeObjects.filter(o => !o.hit && !o.missed);
+
+                // Completion Check
+                if (gameTime > this.lastObjectTime + 1500) {
+                    this.screen = SCREENS.RESULTS;
+                }
+            }
+
             const rawCount = this.landmarks.length;
             const trailCount = this.trails[15].length;
             this.ctx.fillStyle = 'white';
@@ -454,15 +476,12 @@ class Game {
                 this.ctx.restore();
             });
 
-            this.drawTrails();
-            this.drawSkeleton();
-            this.drawBoundingBox();
-
             // Phase 3: Gesture HUD
             const isActive = (Date.now() - this.gestureTime < 1000);
             this.ctx.fillStyle = isActive ? '#00ff00' : '#444444';
             this.ctx.font = "bold 30px monospace";
             this.ctx.fillText(`GESTURE: ${isActive ? this.lastGesture : "NONE"}`, 20, 100);
+
             this.drawTrails();
             this.drawSkeleton();
             this.drawBoundingBox();
