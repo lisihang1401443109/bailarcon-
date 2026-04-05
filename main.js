@@ -160,6 +160,7 @@ class Game {
         this.activeObjects = [];
         this.gameStartTime = 0;
         this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
+        this.smoothPoints = { 15: null, 16: null, 27: null, 28: null }; // Step 2.1: Lerp targets
         this.latency = 0; // Step 3: Performance benchmark
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
@@ -337,9 +338,9 @@ class Game {
         this.ctx.fillText(`${this.debugMsg} | VIDEO: ${vState} (${vTime}s) | SCREEN: ${this.screen.toUpperCase()}`, 20, 30);
 
         if (this.landmarks) {
-            this.updateTrails();
+            this.updateTrails(); // Now sampled in high-frequency animate loop
             const rawCount = this.landmarks.length;
-            const trailCount = this.trails[15].length; // Check one hand
+            const trailCount = this.trails[15].length;
             this.ctx.fillStyle = 'white';
             this.ctx.fillText(`AI: ${rawCount} LM | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
             this.drawTrails();
@@ -401,15 +402,28 @@ class Game {
     }
 
     updateTrails() {
+        const LERP_FACTOR = 0.4; // Smoothness vs Latency (0.1 = heavy lag, 0.9 = stiff)
+
         [15, 16, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
             if (lm) {
-                const px = (1 - lm.x) * this.canvas.width;
-                const py = lm.y * this.canvas.height;
-                this.trails[idx].unshift({ x: px, y: py });
-                if (this.trails[idx].length > 60) this.trails[idx].pop();
+                const targetX = (1 - lm.x) * this.canvas.width;
+                const targetY = lm.y * this.canvas.height;
+
+                // Initialize smooth point if null
+                if (!this.smoothPoints[idx]) {
+                    this.smoothPoints[idx] = { x: targetX, y: targetY };
+                }
+
+                // Interpolate toward AI target
+                this.smoothPoints[idx].x += (targetX - this.smoothPoints[idx].x) * LERP_FACTOR;
+                this.smoothPoints[idx].y += (targetY - this.smoothPoints[idx].y) * LERP_FACTOR;
+
+                this.trails[idx].unshift({ x: this.smoothPoints[idx].x, y: this.smoothPoints[idx].y });
+                if (this.trails[idx].length > 100) this.trails[idx].pop(); // More points for longer trails
             } else {
                 this.trails[idx] = [];
+                this.smoothPoints[idx] = null;
             }
         });
     }
