@@ -335,8 +335,9 @@ class Game {
         if (this.landmarks) {
             this.updateTrails();
             const rawCount = this.landmarks.length;
+            const trailCount = this.trails[15].length; // Check one hand
             this.ctx.fillStyle = 'white';
-            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS | CANVAS: ${this.canvas.width}x${this.canvas.height}`, 20, 60);
+            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS | CANVAS: ${this.canvas.width}x${this.canvas.height} | TRAIL BUF: ${trailCount}`, 20, 60);
             this.drawTrails();
             this.drawSkeleton();
             this.drawBoundingBox();
@@ -398,7 +399,7 @@ class Game {
     updateTrails() {
         [15, 16, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
-            if (lm && lm.visibility > 0.1) {
+            if (lm) { // Nuclear: No visibility gate
                 const px = (1 - lm.x) * this.canvas.width;
                 const py = lm.y * this.canvas.height;
                 this.trails[idx].unshift({ x: px, y: py });
