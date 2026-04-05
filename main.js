@@ -335,17 +335,12 @@ class Game {
         this.ctx.textAlign = "left";
         const vState = this.video.readyState >= 2 ? "READY" : "WAITING";
         const vTime = this.video.currentTime.toFixed(2);
-        const gameTime = this.screen === SCREENS.PLAYING ? now - this.gameStartTime : 0;
         this.ctx.fillText(`${this.debugMsg} | VIDEO: ${vState} (${vTime}s) | SCREEN: ${this.screen.toUpperCase()}`, 20, 30);
 
-        if (this.screen === SCREENS.PLAYING && gameTime < 2000) {
-            this.ctx.fillStyle = '#00ffff';
-            this.ctx.font = "bold 80px Outfit";
-            this.ctx.textAlign = "center";
-            this.ctx.fillText("GO!", this.canvas.width / 2, this.canvas.height / 2);
-        }
-
         if (this.landmarks) {
+            const rawCount = this.landmarks.length;
+            this.ctx.fillStyle = 'white';
+            this.ctx.fillText(`AI QUALITY: ${rawCount} LANDMARKS DETECTED`, 20, 60);
             this.drawSkeleton();
             this.drawBoundingBox();
         } else {
