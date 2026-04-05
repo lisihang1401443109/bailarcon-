@@ -1,7 +1,7 @@
 // BAILARCON - TOTAL LOCAL CORE
 // 100% Offline: No CDNs, No Internet required.
 
-import { PoseLandmarker, FilesetResolver } from "./vision_bundle.js";
+import { HandLandmarker, FilesetResolver } from "./vision_bundle.js";
 import { sampleBeatmap, maps } from "./beatmap.js";
 
 const SCREENS = { LOBBY: 'lobby', PLAYING: 'playing', RESULTS: 'results' };
@@ -9,10 +9,12 @@ const TARGET_MAP = {
     'HAND': [15, 16, 19, 20], // Wrists, Index fingers
     'FOOT': [27, 28, 31, 32]  // Ankles, Toes
 };
-const POSE_CONNECTIONS = [
-    [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], // Shoulders and Arms
-    [11, 23], [12, 24], [23, 24], // Torso
-    [23, 25], [25, 27], [24, 26], [26, 28] // Legs
+const HAND_SKELETON_CONNECTIONS = [
+    [0,1],[1,2],[2,3],[3,4],           // thumb
+    [0,5],[5,6],[6,7],[7,8],           // index
+    [5,9],[9,10],[10,11],[11,12],       // middle
+    [9,13],[13,14],[14,15],[15,16],     // ring
+    [13,17],[0,17],[17,18],[18,19],[19,20] // pinky + palm closure
 ];
 
 class Circle {
@@ -211,7 +213,8 @@ class Game {
         this._debugMsg = "LOADING...";
         this.screen = SCREENS.LOBBY;
 
-        this.poseLandmarker = null;
+        this.handLandmarker = null;
+        this.handResult = null;
         this.landmarks = null;
         this.objects = [];
         this.activeObjects = [];
@@ -225,7 +228,7 @@ class Game {
         this.hitFeedback = []; // {text, color, x, y, time}
         this.lastObjectTime = 0;
 
-        this.trails = { 15: [], 16: [], 27: [], 28: [] }; // Step 2: Trail history
+        this.trails = { 15: [], 16: [] }; // Step 2: Trail history (hands only)
         this.smoothLandmarks = []; // Step 3.1: Global Stabilization
         this.latency = 0; // Step 3: Performance benchmark
 
@@ -260,8 +263,13 @@ class Game {
         this.animate();
 
         try {
+            // Lower resolution on mobile reduces GPU decode cost and speeds up pose detection.
+            // Capping frameRate at 30 avoids processing frames faster than MediaPipe can handle.
+            const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            const camW = isMobile ? 480 : 640;
+            const camH = isMobile ? 360 : 480;
             this.video.srcObject = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 }
+                video: { width: { ideal: camW }, height: { ideal: camH }, frameRate: { ideal: 30, max: 30 } }
             });
             this.video.onloadedmetadata = () => { this.video.play(); this.resize(); this.startAI(); };
         } catch (err) { this.debugMsg = "CAMERA FAIL: " + err.message; }
@@ -273,20 +281,18 @@ class Game {
             // STEP 1: LOAD WASM FROM LOCAL ./wasm/ FOLDER
             const resolver = await FilesetResolver.forVisionTasks("./wasm");
 
-            this.debugMsg = "LOADING POSE MODEL (LOCAL)...";
-            // STEP 2: LOAD MODEL FROM LOCAL ./pose_landmarker.task
-            this.poseLandmarker = await PoseLandmarker.createFromOptions(resolver, {
+            this.debugMsg = "LOADING HAND MODEL (LOCAL)...";
+            // STEP 2: LOAD HandLandmarker — purpose-built for hands, much faster on mobile
+            this.handLandmarker = await HandLandmarker.createFromOptions(resolver, {
                 baseOptions: {
-                    modelAssetPath: `./pose_landmarker.task`,
+                    modelAssetPath: `./hand_landmarker.task`,
                     delegate: "GPU"
                 },
                 runningMode: "VIDEO",
-                numPoses: 1,
-                minPoseDetectionConfidence: 0.1,
-                minPoseTrackingConfidence: 0.1,
-                minPresenceConfidence: 0.1,
-                outputSegmentationMasks: false,
-                modelComplexity: 0 // LITE MODEL (Speed focus)
+                numHands: 2,
+                minHandDetectionConfidence: 0.5,
+                minHandPresenceConfidence: 0.5,
+                minTrackingConfidence: 0.5
             });
 
             this.debugMsg = "LOCAL AI ONLINE.";
@@ -313,12 +319,20 @@ class Game {
     }
 
     processLoop() {
+        let lastVideoTime = -1; // Track processed video frames to avoid reprocessing the same frame
         const loop = () => {
             const now = performance.now();
-            if (this.video.readyState >= 2 && this.poseLandmarker && !this.video.paused) {
-                const res = this.poseLandmarker.detectForVideo(this.video, now);
-                this.latency = Math.round(performance.now() - now);
-                this.landmarks = res.landmarks && res.landmarks[0] ? res.landmarks[0] : null;
+            if (this.video.readyState >= 2 && this.handLandmarker && !this.video.paused) {
+                // Only run pose detection when the video has a genuinely new frame.
+                // video.currentTime only advances when the camera produces a new frame (~30fps),
+                // so skipping duplicate timestamps cuts ~half the GPU work at 60fps rAF.
+                if (this.video.currentTime !== lastVideoTime) {
+                    lastVideoTime = this.video.currentTime;
+                    const res = this.handLandmarker.detectForVideo(this.video, now);
+                    this.latency = Math.round(performance.now() - now);
+                    this.handResult = (res.landmarks && res.landmarks.length > 0) ? res : null;
+                    this.landmarks = this.handResult ? this._buildLandmarkProxy(this.handResult) : null;
+                }
 
                 if (this.landmarks) {
                     this.detectGestures();
@@ -358,6 +372,29 @@ class Game {
         requestAnimationFrame(loop);
     }
 
+    _buildLandmarkProxy(res) {
+        // Maps HandLandmarker output (2 hands × 21 landmarks) into the sparse
+        // smoothLandmarks indices the rest of the game already uses.
+        //
+        // Handedness inversion: the game flips X via (1 - lm.x), so the model's
+        // perspective is mirrored relative to what the player sees:
+        //   label='Left'  → camera-left → canvas-RIGHT after flip → user's RIGHT hand → slots [16],[20]
+        //   label='Right' → camera-right → canvas-LEFT after flip → user's LEFT hand  → slots [15],[19]
+        const proxy = [];
+        for (let i = 0; i < res.landmarks.length; i++) {
+            const hand21 = res.landmarks[i];
+            const label = res.handednesses[i][0].categoryName;
+            if (label === 'Left') {     // user's right hand
+                proxy[16] = hand21[0];  // wrist
+                proxy[20] = hand21[8];  // index fingertip
+            } else {                    // user's left hand
+                proxy[15] = hand21[0];
+                proxy[19] = hand21[8];
+            }
+        }
+        return (proxy[15] || proxy[16]) ? proxy : null;
+    }
+
     handleHit(result, pos) {
         if (result === 'PERFECT') this.score += 300 * (1 + this.combo * 0.1);
         else if (result === 'GOOD') this.score += 100 * (1 + this.combo * 0.1);
@@ -392,25 +429,12 @@ class Game {
     }
 
     getRelativePos(bx, by) {
-        // Fallback to screen mapping if no body detected or AI not yet stable
-        if (!this.smoothLandmarks || this.smoothLandmarks.length < 33) {
-            return { x: (bx / 1000) * this.canvas.width, y: (by / 1000) * this.canvas.height };
-        }
-
-        // Center = Midpoint of shoulders and hips for a stable core origin
-        const sMidX = (this.smoothLandmarks[11].x + this.smoothLandmarks[12].x) / 2;
-        const sMidY = (this.smoothLandmarks[11].y + this.smoothLandmarks[12].y) / 2;
-        const hMidX = (this.smoothLandmarks[23].x + this.smoothLandmarks[24].x) / 2;
-        const hMidY = (this.smoothLandmarks[23].y + this.smoothLandmarks[24].y) / 2;
-
-        const centerX = (sMidX + hMidX) / 2;
-        const centerY = (sMidY + hMidY) / 2;
-
-        // Scale = Shoulder width * 4.5 (represents comfortable reach zone)
-        const sWidth = Math.hypot(this.smoothLandmarks[11].x - this.smoothLandmarks[12].x, this.smoothLandmarks[11].y - this.smoothLandmarks[12].y);
-        const reachScale = sWidth * 4.5;
-
-        // Translate 0-1000 beatmap space to Body-Relative Pixel Space
+        // Fixed screen-center reference — no body calibration needed.
+        // Works immediately on any device at any distance from the camera.
+        // Play zone is centered at 45% height, spanning 65% of canvas height.
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height * 0.45;
+        const reachScale = this.canvas.height * 0.65;
         return {
             x: centerX + (bx - 500) * (reachScale / 1000),
             y: centerY + (by - 500) * (reachScale / 1000)
@@ -471,10 +495,10 @@ class Game {
                 }
             }
 
-            const rawCount = this.landmarks.length;
+            const rawCount = this.handResult ? this.handResult.landmarks.length : 0;
             const trailCount = this.trails[15].length;
             this.ctx.fillStyle = 'white';
-            this.ctx.fillText(`AI: ${rawCount} LM | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
+            this.ctx.fillText(`AI: ${rawCount} HANDS | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
 
             // HUD: Score & Combo
             this.ctx.font = "bold 40px Outfit";
@@ -510,6 +534,7 @@ class Game {
             this.drawBoundingBox();
         } else {
             this.smoothLandmarks = []; // Reset if tracking lost
+            this.handResult = null;
             this.ctx.fillStyle = '#ff00ff';
             this.ctx.font = "bold 20px monospace";
             this.ctx.textAlign = "center";
@@ -519,29 +544,27 @@ class Game {
     }
 
     drawSkeleton() {
-        this.ctx.lineWidth = 5;
-        this.ctx.strokeStyle = '#ff0000'; // High contrast RED
+        if (!this.handResult) return;
 
-        // Use STABILIZED landmarks
-        const lms = this.smoothLandmarks;
-        if (lms.length < 33) return;
+        // Draw 21-point hand skeleton for each detected hand from raw result.
+        // Raw result is used (not smoothLandmarks) so visual feedback is instant.
+        this.handResult.landmarks.forEach((hand21, hi) => {
+            const isRight = this.handResult.handednesses[hi][0].categoryName === 'Left';
+            this.ctx.strokeStyle = isRight ? '#00ffff' : '#ff00ff';
+            this.ctx.lineWidth = 3;
 
-        POSE_CONNECTIONS.forEach(([i, j]) => {
-            const lm1 = lms[i], lm2 = lms[j];
-            if (lm1 && lm2) {
-                this.ctx.beginPath();
-                this.ctx.moveTo(lm1.x, lm1.y);
-                this.ctx.lineTo(lm2.x, lm2.y);
-                this.ctx.stroke();
-            }
-        });
+            HAND_SKELETON_CONNECTIONS.forEach(([i, j]) => {
+                const x1 = (1 - hand21[i].x) * this.canvas.width, y1 = hand21[i].y * this.canvas.height;
+                const x2 = (1 - hand21[j].x) * this.canvas.width, y2 = hand21[j].y * this.canvas.height;
+                this.ctx.beginPath(); this.ctx.moveTo(x1, y1); this.ctx.lineTo(x2, y2); this.ctx.stroke();
+            });
 
-        this.ctx.fillStyle = '#ffff00';
-        [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(idx => {
-            const lm = lms[idx];
-            if (lm) {
-                this.ctx.beginPath(); this.ctx.arc(lm.x, lm.y, 8, 0, Math.PI * 2); this.ctx.fill();
-            }
+            this.ctx.fillStyle = '#ffff00';
+            hand21.forEach((lm, idx) => {
+                const px = (1 - lm.x) * this.canvas.width, py = lm.y * this.canvas.height;
+                const r = (idx === 0 || idx === 8) ? 10 : 5; // bigger dot at wrist + index tip
+                this.ctx.beginPath(); this.ctx.arc(px, py, r, 0, Math.PI * 2); this.ctx.fill();
+            });
         });
     }
 
@@ -701,13 +724,14 @@ class Game {
     }
 
     drawBoundingBox() {
-        if (this.smoothLandmarks.length < 33) return;
+        if (!this.handResult) return;
         let minX = this.canvas.width, minY = this.canvas.height, maxX = 0, maxY = 0;
-        this.smoothLandmarks.forEach(lm => {
-            minX = Math.min(minX, lm.x);
-            minY = Math.min(minY, lm.y);
-            maxX = Math.max(maxX, lm.x);
-            maxY = Math.max(maxY, lm.y);
+        this.handResult.landmarks.forEach(hand21 => {
+            hand21.forEach(lm => {
+                const px = (1 - lm.x) * this.canvas.width, py = lm.y * this.canvas.height;
+                minX = Math.min(minX, px); minY = Math.min(minY, py);
+                maxX = Math.max(maxX, px); maxY = Math.max(maxY, py);
+            });
         });
 
         this.ctx.strokeStyle = 'white';
@@ -716,26 +740,27 @@ class Game {
     }
 
     stabilizeSkeleton() {
-        const LERP = 0.25; // Smoothing factor
+        const LERP = 0.4;
         if (!this.landmarks) return;
 
-        if (this.smoothLandmarks.length < 33) {
-            this.smoothLandmarks = this.landmarks.map(lm => ({
-                x: (1 - lm.x) * this.canvas.width,
-                y: lm.y * this.canvas.height
-            }));
-        } else {
-            for (let i = 0; i < 33; i++) {
-                const targetX = (1 - this.landmarks[i].x) * this.canvas.width;
-                const targetY = this.landmarks[i].y * this.canvas.height;
-                this.smoothLandmarks[i].x += (targetX - this.smoothLandmarks[i].x) * LERP;
-                this.smoothLandmarks[i].y += (targetY - this.smoothLandmarks[i].y) * LERP;
+        // Only smooth the 4 slots the game uses: wrists (15,16) + index tips (19,20).
+        // Per-slot null checks handle the case where only one hand is visible.
+        for (const i of [15, 16, 19, 20]) {
+            const raw = this.landmarks[i];
+            if (!raw) { this.smoothLandmarks[i] = null; continue; }
+            const tx = (1 - raw.x) * this.canvas.width;
+            const ty = raw.y * this.canvas.height;
+            if (!this.smoothLandmarks[i]) {
+                this.smoothLandmarks[i] = { x: tx, y: ty };
+            } else {
+                this.smoothLandmarks[i].x += (tx - this.smoothLandmarks[i].x) * LERP;
+                this.smoothLandmarks[i].y += (ty - this.smoothLandmarks[i].y) * LERP;
             }
         }
     }
 
     updateTrails() {
-        [15, 16, 27, 28].forEach(idx => {
+        [15, 16].forEach(idx => {
             const lm = this.smoothLandmarks[idx];
             if (lm) {
                 this.trails[idx].unshift({ x: lm.x, y: lm.y });
@@ -759,8 +784,9 @@ class Game {
                 const dx = lm.x - this.lastPos[idx].x;
                 const dy = lm.y - this.lastPos[idx].y;
 
-                this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.8 + dx * 0.2;
-                this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
+                // Reduced decay from 0.8→0.65 so velocity responds faster to new movement
+                this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.65 + dx * 0.35;
+                this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.65 + dy * 0.35;
 
                 // TUNED SENSITIVITY: 10-frame window for snappier swipes
                 const SWIPE_VEL = 0.02; // More sensitive
@@ -786,11 +812,10 @@ class Game {
             }
         });
 
-        // Save current positions for next frame delta
-        this.lastPos = {
-            15: { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z },
-            16: { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z }
-        };
+        // Save current positions for next frame delta (guard: hand may not be visible)
+        this.lastPos = this.lastPos || {};
+        if (this.landmarks[15]) this.lastPos[15] = { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z || 0 };
+        if (this.landmarks[16]) this.lastPos[16] = { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z || 0 };
     }
 
     triggerGesture(name) {
@@ -807,11 +832,11 @@ class Game {
         this.ctx.lineCap = 'round';
         this.ctx.lineJoin = 'round';
 
-        [15, 16, 27, 28].forEach(idx => {
+        [15, 16].forEach(idx => {
             const history = this.trails[idx];
             if (history.length < 2) return;
 
-            const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
+            const color = '#00ffff';
 
             // Pass 1: Massive Outer Glow - Faster Fade (Power 3)
             this.ctx.lineWidth = 40;
