@@ -442,6 +442,5 @@ class Game {
         this.ctx.shadowBlur = 0;
     }
 }
-}
 
 new Game();
