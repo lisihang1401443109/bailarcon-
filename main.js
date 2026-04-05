@@ -353,13 +353,13 @@ class Game {
     }
 
     drawSkeleton() {
-        this.ctx.lineWidth = 3;
-        this.ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+        this.ctx.lineWidth = 5;
+        this.ctx.strokeStyle = '#ff0000'; // High contrast RED
 
-        // Draw Connections
+        // Draw Connections - NO VISIBILITY GATES for testing
         POSE_CONNECTIONS.forEach(([i, j]) => {
             const lm1 = this.landmarks[i], lm2 = this.landmarks[j];
-            if (lm1 && lm2 && lm1.visibility > 0.1 && lm2.visibility > 0.1) {
+            if (lm1 && lm2) {
                 this.ctx.beginPath();
                 this.ctx.moveTo((1 - lm1.x) * this.canvas.width, lm1.y * this.canvas.height);
                 this.ctx.lineTo((1 - lm2.x) * this.canvas.width, lm2.y * this.canvas.height);
@@ -367,41 +367,35 @@ class Game {
             }
         });
 
-        // Draw simplified joints
+        // Draw BIG joints
         this.ctx.fillStyle = '#ffff00';
-        [0, 15, 16, 27, 28].forEach(idx => {
+        [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28].forEach(idx => {
             const lm = this.landmarks[idx];
-            if (lm && lm.visibility > 0.1) {
+            if (lm) {
                 const px = (1 - lm.x) * this.canvas.width;
                 const py = lm.y * this.canvas.height;
-                this.ctx.beginPath(); this.ctx.arc(px, py, 6, 0, Math.PI * 2); this.ctx.fill();
+                this.ctx.beginPath(); this.ctx.arc(px, py, 8, 0, Math.PI * 2); this.ctx.fill();
             }
         });
     }
 
     drawBoundingBox() {
         let minX = 1, minY = 1, maxX = 0, maxY = 0;
-        let count = 0;
         this.landmarks.forEach(lm => {
-            if (lm.visibility > 0.1) {
-                minX = Math.min(minX, lm.x);
-                minY = Math.min(minY, lm.y);
-                maxX = Math.max(maxX, lm.x);
-                maxY = Math.max(maxY, lm.y);
-                count++;
-            }
+            minX = Math.min(minX, lm.x);
+            minY = Math.min(minY, lm.y);
+            maxX = Math.max(maxX, lm.x);
+            maxY = Math.max(maxY, lm.y);
         });
 
-        if (count > 5) {
-            const bx = (1 - maxX) * this.canvas.width;
-            const by = minY * this.canvas.height;
-            const bw = (maxX - minX) * this.canvas.width;
-            const bh = (maxY - minY) * this.canvas.height;
+        const bx = (1 - maxX) * this.canvas.width;
+        const by = minY * this.canvas.height;
+        const bw = (maxX - minX) * this.canvas.width;
+        const bh = (maxY - minY) * this.canvas.height;
 
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            this.ctx.lineWidth = 1;
-            this.ctx.strokeRect(bx, by, bw, bh);
-        }
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(bx, by, bw, bh);
     }
 }
 
