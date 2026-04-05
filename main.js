@@ -416,13 +416,16 @@ class Game {
         const now = performance.now();
         const lh = this.smoothLandmarks[15];
         const rh = this.smoothLandmarks[16];
+        const frame = this.getUserFrame();
 
         if (lh && rh) {
-            const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
-            const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
+            // Targets at +/- 25% of user's reach width (around shoulder/arm expansion)
+            const leftTarget = { x: frame.x - (frame.scale * 0.25), y: frame.y - (frame.scale * 0.1) };
+            const rightTarget = { x: frame.x + (frame.scale * 0.25), y: frame.y - (frame.scale * 0.1) };
 
-            const inLeft = Math.hypot(lh.x - leftTarget.x, lh.y - leftTarget.y) < 120; // Increased tolerance
-            const inRight = Math.hypot(rh.x - rightTarget.x, rh.y - rightTarget.y) < 120;
+            const tolerance = frame.scale * 0.15; // Proportional tolerance
+            const inLeft = Math.hypot(lh.x - leftTarget.x, lh.y - leftTarget.y) < tolerance;
+            const inRight = Math.hypot(rh.x - rightTarget.x, rh.y - rightTarget.y) < tolerance;
 
             if (inLeft && inRight) {
                 if (!this.holdStartTime) this.holdStartTime = now;
@@ -461,13 +464,17 @@ class Game {
         if (this.accuracyEl) this.accuracyEl.textContent = acc + "%";
     }
 
-    getRelativePos(bx, by) {
-        // Fallback to screen mapping if no body detected or AI not yet stable
+    getUserFrame() {
+        // Fallback to screen center if no body detected
         if (!this.smoothLandmarks || this.smoothLandmarks.length < 33) {
-            return { x: (bx / 1000) * this.canvas.width, y: (by / 1000) * this.canvas.height };
+            return {
+                x: this.canvas.width / 2,
+                y: this.canvas.height / 2,
+                scale: Math.min(this.canvas.width, this.canvas.height) * 0.8
+            };
         }
 
-        // Center = Midpoint of shoulders and hips for a stable core origin
+        // Core Center: Midpoint of shoulders and hips
         const sMidX = (this.smoothLandmarks[11].x + this.smoothLandmarks[12].x) / 2;
         const sMidY = (this.smoothLandmarks[11].y + this.smoothLandmarks[12].y) / 2;
         const hMidX = (this.smoothLandmarks[23].x + this.smoothLandmarks[24].x) / 2;
@@ -476,14 +483,19 @@ class Game {
         const centerX = (sMidX + hMidX) / 2;
         const centerY = (sMidY + hMidY) / 2;
 
-        // Scale = Shoulder width * 4.5 (represents comfortable reach zone)
+        // Reach Scale: Shoulder width multiplied by a factor (4.5) to represent reach
         const sWidth = Math.hypot(this.smoothLandmarks[11].x - this.smoothLandmarks[12].x, this.smoothLandmarks[11].y - this.smoothLandmarks[12].y);
-        const reachScale = sWidth * 4.5;
+        const scale = sWidth * 4.5;
 
-        // Translate 0-1000 beatmap space to Body-Relative Pixel Space
+        return { x: centerX, y: centerY, scale };
+    }
+
+    getRelativePos(bx, by) {
+        const frame = this.getUserFrame();
+        // Translate 0-1000 beatmap space to User-Relative Pixel Space
         return {
-            x: centerX + (bx - 500) * (reachScale / 1000),
-            y: centerY + (by - 500) * (reachScale / 1000)
+            x: frame.x + (bx - 500) * (frame.scale / 1000),
+            y: frame.y + (by - 500) * (frame.scale / 1000)
         };
     }
 
@@ -630,18 +642,20 @@ class Game {
         const rh = this.smoothLandmarks[16];
         if (rh) {
             let foundHover = -1;
-            const cardWidth = 300;
-            const spacing = 40;
-            const centerX = this.canvas.width / 2;
-            // START X calculation mirrored from drawMenu
+            const frame = this.getUserFrame();
+            const cardWidth = frame.scale * 0.35; // Slightly larger for easier selection
+            const cardHeight = cardWidth * 0.6;
+            const spacing = frame.scale * 0.05;
+
+            // START X calculation centered on USER
             if (this.currentScroll === undefined) this.currentScroll = this.selectedMapIdx;
-            const startX = (this.canvas.width / 2) - (this.currentScroll * (cardWidth + spacing)) - (cardWidth / 2);
+            const startX = frame.x - (this.currentScroll * (cardWidth + spacing)) - (cardWidth / 2);
 
             this.maps.forEach((map, i) => {
                 const itemX = startX + (i * (cardWidth + spacing));
-                const itemY = (this.canvas.height / 2) - 100;
+                const itemY = frame.y - (cardHeight / 2); // Perfectly centered on torso vertically
 
-                if (rh.x > itemX && rh.x < itemX + cardWidth && rh.y > itemY && rh.y < itemY + 200) {
+                if (rh.x > itemX && rh.x < itemX + cardWidth && rh.y > itemY && rh.y < itemY + cardHeight) {
                     foundHover = i;
                 }
             });
@@ -666,11 +680,12 @@ class Game {
     }
 
     drawMenu() {
-        const centerX = this.canvas.width / 2;
-        const centerY = this.canvas.height / 2;
-        const cardWidth = 300;
-        const cardHeight = 200;
-        const spacing = 40;
+        const frame = this.getUserFrame();
+        const centerX = frame.x;
+        const centerY = frame.y;
+        const cardWidth = frame.scale * 0.35;
+        const cardHeight = cardWidth * 0.6;
+        const spacing = frame.scale * 0.05;
 
         // Smooth horizontal scrolling (interpolating toward target index)
         if (this.currentScroll === undefined) this.currentScroll = this.selectedMapIdx;
@@ -679,16 +694,16 @@ class Game {
         const startX = centerX - (this.currentScroll * (cardWidth + spacing)) - (cardWidth / 2);
 
         this.ctx.fillStyle = "white";
-        this.ctx.font = "bold 32px Outfit";
+        this.ctx.font = `bold ${Math.max(16, frame.scale * 0.03)}px Outfit`;
         this.ctx.textAlign = "center";
-        this.ctx.fillText("SWIPE LEFT/RIGHT TO BROWSE | HOVER TO SELECT", centerX, centerY - 250);
+        this.ctx.fillText("SWIPE LEFT/RIGHT TO BROWSE | HOVER TO SELECT", centerX, centerY - (frame.scale * 0.25));
         this.ctx.textAlign = "left";
 
         this.maps.forEach((map, i) => {
             const isSelected = i === this.selectedMapIdx;
             const isHovered = i === this.dwellIdx;
             const itemX = startX + (i * (cardWidth + spacing));
-            const itemY = centerY - 100;
+            const itemY = centerY - (cardHeight / 2);
 
             // Distance Fade
             const distFromCenter = Math.abs(centerX - (itemX + cardWidth / 2));
@@ -801,38 +816,39 @@ class Game {
     }
 
     drawHandTargets() {
-        const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
-        const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
+        const frame = this.getUserFrame();
+        const leftTarget = { x: frame.x - (frame.scale * 0.25), y: frame.y - (frame.scale * 0.1) };
+        const rightTarget = { x: frame.x + (frame.scale * 0.25), y: frame.y - (frame.scale * 0.1) };
+        const radius = frame.scale * 0.08;
 
         const lh = this.smoothLandmarks[15];
         const rh = this.smoothLandmarks[16];
 
         [leftTarget, rightTarget].forEach((t, i) => {
             const hand = i === 0 ? lh : rh;
-            const isInside = hand && Math.hypot(hand.x - t.x, hand.y - t.y) < 100;
+            const isInside = hand && Math.hypot(hand.x - t.x, hand.y - t.y) < radius * 1.5;
 
             this.ctx.beginPath();
-            this.ctx.arc(t.x, t.y, 80, 0, Math.PI * 2);
+            this.ctx.arc(t.x, t.y, radius, 0, Math.PI * 2);
             this.ctx.strokeStyle = isInside ? "#00ff00" : "rgba(255,255,255,0.4)";
             this.ctx.shadowBlur = isInside ? 20 : 0;
             this.ctx.shadowColor = "#00ff00";
             this.ctx.lineWidth = 8;
             this.ctx.stroke();
-            this.ctx.shadowBlur = 0; // Reset shadow
+            this.ctx.shadowBlur = 0;
 
-            // Progress Fill
             if (this.preStartHoldTime > 0 && isInside) {
                 const p = Math.min(1, this.preStartHoldTime / 2000);
                 this.ctx.beginPath();
-                this.ctx.arc(t.x, t.y, 80, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p));
+                this.ctx.arc(t.x, t.y, radius, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p));
                 this.ctx.strokeStyle = "#00ffff";
                 this.ctx.stroke();
             }
 
             this.ctx.fillStyle = isInside ? "#00ff00" : "white";
-            this.ctx.font = "bold 20px Outfit";
+            this.ctx.font = `bold ${Math.max(12, radius * 0.3)}px Outfit`;
             this.ctx.textAlign = "center";
-            this.ctx.fillText(i === 0 ? "LEFT" : "RIGHT", t.x, t.y + 7);
+            this.ctx.fillText(i === 0 ? "LEFT" : "RIGHT", t.x, t.y + (radius * 0.1));
         });
     }
 
