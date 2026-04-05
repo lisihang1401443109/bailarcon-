@@ -448,12 +448,11 @@ class Game {
     }
 
     detectGestures() {
-        const hands = [16]; // Focus ONLY on the Right Hand
+        const hands = [16];
         hands.forEach(idx => {
             const lm = this.landmarks[idx];
             if (!lm) return;
 
-            // Histroy for circular/stir check
             this.handPath[idx].unshift({ x: lm.x, y: lm.y });
             if (this.handPath[idx].length > 30) this.handPath[idx].pop();
 
@@ -464,19 +463,22 @@ class Game {
                 this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.8 + dx * 0.2;
                 this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
 
-                // LOWER SENSITIVITY: Higher thresholds + displacement check
-                const SWIPE_VEL = 0.08;
-                const SWIPE_DIST = 0.2; // Must move 20% of screen
+                // TUNED SENSITIVITY: 10-frame window for snappier swipes
+                const SWIPE_VEL = 0.04;
+                const SWIPE_DIST = 0.1;
 
                 if (Math.abs(this.handVelocity[idx].vx) > SWIPE_VEL) {
-                    const totalX = lm.x - this.handPath[idx][this.handPath[idx].length - 1].x;
+                    const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
+                    const totalX = lm.x - samplePoint.x;
                     if (Math.abs(totalX) > SWIPE_DIST) {
-                        this.triggerGesture(totalX > 0 ? "SWIPE RIGHT" : "SWIPE LEFT");
+                        // MIRROR FIX: Moving toward 0 (Left on camera) is "Right" for mirrored user
+                        this.triggerGesture(totalX < 0 ? "SWIPE RIGHT" : "SWIPE LEFT");
                     }
                 }
 
                 if (Math.abs(this.handVelocity[idx].vy) > SWIPE_VEL) {
-                    const totalY = lm.y - this.handPath[idx][this.handPath[idx].length - 1].y;
+                    const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
+                    const totalY = lm.y - samplePoint.y;
                     if (Math.abs(totalY) > SWIPE_DIST) {
                         this.triggerGesture(totalY > 0 ? "SWIPE DOWN" : "SWIPE UP");
                     }
