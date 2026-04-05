@@ -165,6 +165,7 @@ class Game {
 
         // Phase 3: Gesture History
         this.handVelocity = { 15: { vx: 0, vy: 0, vz: 0 }, 16: { vx: 0, vy: 0, vz: 0 } };
+        this.handPath = { 15: [], 16: [] }; // Last 30 frames for circle detection
         this.lastGesture = "NONE";
         this.gestureTime = 0;
 
@@ -251,7 +252,7 @@ class Game {
                     this.detectGestures();
                 }
 
-                if (this.screen === SCREENS.LOBBY && this.lastGesture === "KNOCK") {
+                if (this.screen === SCREENS.LOBBY && this.lastGesture === "STIR") {
                     this.startGame();
                 }
 
@@ -355,11 +356,10 @@ class Game {
             this.ctx.fillText(`AI: ${rawCount} LM | LATENCY: ${this.latency}ms | BUF: ${trailCount} | ${this.canvas.width}x${this.canvas.height}`, 20, 60);
 
             // Phase 3: Gesture HUD
-            if (Date.now() - this.gestureTime < 1000) {
-                this.ctx.fillStyle = '#00ff00';
-                this.ctx.font = "bold 30px monospace";
-                this.ctx.fillText(`GESTURE: ${this.lastGesture}`, 20, 100);
-            }
+            const isActive = (Date.now() - this.gestureTime < 1000);
+            this.ctx.fillStyle = isActive ? '#00ff00' : '#444444';
+            this.ctx.font = "bold 30px monospace";
+            this.ctx.fillText(`GESTURE: ${isActive ? this.lastGesture : "NONE"}`, 20, 100);
 
             this.drawTrails();
             this.drawSkeleton();
@@ -411,8 +411,8 @@ class Game {
             maxY = Math.max(maxY, lm.y);
         });
 
-        this.ctx.strokeStyle = this.lastGesture === 'KNOCK' ? '#00ff00' : 'white';
-        this.ctx.lineWidth = this.lastGesture === 'KNOCK' ? 5 : 2;
+        this.ctx.strokeStyle = this.lastGesture === 'STIR' ? '#00ff00' : 'white';
+        this.ctx.lineWidth = this.lastGesture === 'STIR' ? 5 : 2;
         this.ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
 
@@ -448,39 +448,64 @@ class Game {
     }
 
     detectGestures() {
-        const hands = [15, 16]; // Check both hands
+        const hands = [15, 16];
         hands.forEach(idx => {
             const lm = this.landmarks[idx];
             if (!lm) return;
 
-            // Velocity Tracking (Relative to screen width)
+            // Histroy for circular/stir check
+            this.handPath[idx].unshift({ x: lm.x, y: lm.y });
+            if (this.handPath[idx].length > 30) this.handPath[idx].pop();
+
             if (this.lastPos && this.lastPos[idx]) {
                 const dx = lm.x - this.lastPos[idx].x;
                 const dy = lm.y - this.lastPos[idx].y;
-                const dz = lm.z - this.lastPos[idx].z;
 
-                // Exponential Average for Velocity
-                this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.7 + dx * 0.3;
-                this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.7 + dy * 0.3;
-                this.handVelocity[idx].vz = this.handVelocity[idx].vz * 0.7 + dz * 0.3;
+                this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.8 + dx * 0.2;
+                this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
 
-                // Thresholds
-                const SWIPE_THRES = 0.03;
-                const KNOCK_THRES = -0.05; // Negative Z = towards camera
+                // LOWER SENSITIVITY: Higher thresholds + displacement check
+                const SWIPE_VEL = 0.08;
+                const SWIPE_DIST = 0.2; // Must move 20% of screen
 
-                if (this.handVelocity[idx].vx > SWIPE_THRES) this.triggerGesture("SWIPE RIGHT");
-                if (this.handVelocity[idx].vx < -SWIPE_THRES) this.triggerGesture("SWIPE LEFT");
-                if (this.handVelocity[idx].vy > SWIPE_THRES) this.triggerGesture("SWIPE DOWN");
-                if (this.handVelocity[idx].vy < -SWIPE_THRES) this.triggerGesture("SWIPE UP");
+                if (Math.abs(this.handVelocity[idx].vx) > SWIPE_VEL) {
+                    const totalX = lm.x - this.handPath[idx][this.handPath[idx].length - 1].x;
+                    if (Math.abs(totalX) > SWIPE_DIST) {
+                        this.triggerGesture(totalX > 0 ? "SWIPE RIGHT" : "SWIPE LEFT");
+                    }
+                }
 
-                // 3D KNOCK: Rapid movement towards camera (negative Z)
-                if (this.handVelocity[idx].vz < KNOCK_THRES) {
-                    this.triggerGesture("KNOCK");
+                if (Math.abs(this.handVelocity[idx].vy) > SWIPE_VEL) {
+                    const totalY = lm.y - this.handPath[idx][this.handPath[idx].length - 1].y;
+                    if (Math.abs(totalY) > SWIPE_DIST) {
+                        this.triggerGesture(totalY > 0 ? "SWIPE DOWN" : "SWIPE UP");
+                    }
+                }
+            }
+
+            // STIRRING DETECTION (Circle)
+            if (this.handPath[idx].length === 30) {
+                let minX = 1, maxX = 0, minY = 1, maxY = 0;
+                this.handPath[idx].forEach(p => {
+                    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                });
+                const w = maxX - minX, h = maxY - minY;
+                // If it's a "box" roughly square and not too tiny
+                if (w > 0.05 && h > 0.05 && Math.abs(w - h) < 0.1) {
+                    // Check if points wrap around center (simple heuristic: total distance vs radius)
+                    let totalDist = 0;
+                    for (let i = 0; i < 29; i++) {
+                        totalDist += Math.hypot(this.handPath[idx][i].x - this.handPath[idx][i + 1].x, this.handPath[idx][i].y - this.handPath[idx][i + 1].y);
+                    }
+                    const perimeter = Math.PI * (w + h) / 2;
+                    if (totalDist > perimeter * 0.8 && totalDist < perimeter * 2.0) {
+                        this.triggerGesture("STIR");
+                    }
                 }
             }
         });
 
-        // Save current positions for next frame delta
         this.lastPos = {
             15: { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z },
             16: { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z }
