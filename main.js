@@ -6,13 +6,13 @@ import { sampleBeatmap, maps } from "./beatmap.js";
 
 const SCREENS = { APP_START: 'appstart', LOBBY: 'lobby', PRE_START: 'prestart', COUNTDOWN: 'countdown', PLAYING: 'playing', RESULTS: 'results' };
 const TARGET_MAP = {
-    'HAND': [15, 16, 19, 20], // Wrists, Index fingers
-    'FOOT': [27, 28, 31, 32]  // Ankles, Toes
+    'HAND': [15, 16], // Wrists only
+    'FOOT': [27, 28]  // Ankles only
 };
 const POSE_CONNECTIONS = [
-    [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], // Shoulders and Arms
+    [11, 12], [11, 15], [12, 16], // Shoulders and Wrists (Direct)
     [11, 23], [12, 24], [23, 24], // Torso
-    [23, 25], [25, 27], [24, 26], [26, 28] // Legs
+    [23, 27], [24, 28] // Hips and Ankles (Direct)
 ];
 
 class Circle {
