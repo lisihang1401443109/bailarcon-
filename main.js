@@ -163,11 +163,11 @@ class Game {
         this.smoothLandmarks = []; // Step 3.1: Global Stabilization
         this.latency = 0; // Step 3: Performance benchmark
 
-        // Phase 3: Gesture History
-        this.handVelocity = { 15: { vx: 0, vy: 0, vz: 0 }, 16: { vx: 0, vy: 0, vz: 0 } };
-        this.handPath = { 15: [], 16: [] }; // Last 10-30 frames
-        this.lastGesture = "NONE";
-        this.gestureTime = 0;
+        // Phase 4: Menu State
+        this.selectedMapIdx = 0;
+        this.dwellTime = 0; // ms hovering
+        this.dwellIdx = -1; // which map is being hovered
+        this.maps = maps;
 
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
         this.init();
@@ -252,8 +252,8 @@ class Game {
                     this.detectGestures();
                 }
 
-                if (this.screen === SCREENS.LOBBY && this.lastGesture === "SWIPE RIGHT") {
-                    this.startGame();
+                if (this.screen === SCREENS.LOBBY) {
+                    this.updateMenuLogic();
                 }
 
                 if (this.screen === SCREENS.PLAYING) {
@@ -350,6 +350,11 @@ class Game {
         if (this.landmarks) {
             this.stabilizeSkeleton();
             this.updateTrails();
+
+            if (this.screen === SCREENS.LOBBY) {
+                this.drawMenu();
+            }
+
             const rawCount = this.landmarks.length;
             const trailCount = this.trails[15].length;
             this.ctx.fillStyle = 'white';
@@ -399,6 +404,95 @@ class Game {
                 this.ctx.beginPath(); this.ctx.arc(lm.x, lm.y, 8, 0, Math.PI * 2); this.ctx.fill();
             }
         });
+    }
+
+    updateMenuLogic() {
+        if (this.lastGesture === "SWIPE DOWN") {
+            this.selectedMapIdx = Math.min(this.selectedMapIdx + 1, this.maps.length - 1);
+            this.lastGesture = "NONE"; // Consume
+        }
+        if (this.lastGesture === "SWIPE UP") {
+            this.selectedMapIdx = Math.max(this.selectedMapIdx - 1, 0);
+            this.lastGesture = "NONE";
+        }
+
+        // Dwell Logic
+        const rh = this.smoothLandmarks[16];
+        if (rh) {
+            // Check if hand is in the "Selected Map" zone (Center of screen)
+            const menuX = this.canvas.width * 0.1, menuY = this.canvas.height * 0.3;
+            const menuW = this.canvas.width * 0.4, menuH = 400; // Total list height
+
+            // Simplified: Hand must be on the left half to select
+            if (rh.x < this.canvas.width * 0.5) {
+                this.dwellTime += 16; // Approx 60fps increment
+                if (this.dwellTime >= 1500) {
+                    this.startGame();
+                    this.dwellTime = 0;
+                }
+            } else {
+                this.dwellTime = 0;
+            }
+        }
+    }
+
+    drawMenu() {
+        const x = this.canvas.width * 0.05;
+        let y = this.canvas.height * 0.2;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.5)";
+        this.ctx.roundRect ? this.ctx.roundRect(x - 10, y - 50, 450, 500, 20) : this.ctx.fillRect(x - 10, y - 50, 450, 500);
+        this.ctx.fill();
+
+        this.ctx.font = "bold 24px Outfit";
+        this.ctx.fillStyle = "white";
+        this.ctx.fillText("SELECT MAP (SWIPE UP/DOWN)", x, y - 20);
+
+        this.maps.forEach((map, i) => {
+            const isSelected = i === this.selectedMapIdx;
+            const itemY = y + (i * 80);
+
+            // Card BG
+            this.ctx.fillStyle = isSelected ? "rgba(0, 255, 255, 0.2)" : "rgba(255, 255, 255, 0.05)";
+            this.ctx.strokeStyle = isSelected ? "#00ffff" : "rgba(255,255,255,0.2)";
+            this.ctx.lineWidth = isSelected ? 4 : 1;
+
+            this.ctx.beginPath();
+            this.ctx.roundRect ? this.ctx.roundRect(x, itemY, 400, 70, 10) : this.ctx.rect(x, itemY, 400, 70);
+            this.ctx.fill(); this.ctx.stroke();
+
+            // Text
+            this.ctx.fillStyle = isSelected ? "#00ffff" : "white";
+            this.ctx.font = "bold 20px Outfit";
+            this.ctx.fillText(map.title, x + 20, itemY + 30);
+            this.ctx.font = "14px Outfit";
+            this.ctx.fillText(`${map.difficulty} | ${map.bpm} BPM`, x + 20, itemY + 55);
+        });
+
+        // Dwell Progress Ring around Right Hand
+        const rh = this.smoothLandmarks[16];
+        if (rh && this.dwellTime > 0) {
+            const progress = this.dwellTime / 1500;
+            this.ctx.beginPath();
+            this.ctx.arc(rh.x, rh.y, 40, 0, Math.PI * 2);
+            this.ctx.strokeStyle = "rgba(255,255,255,0.3)";
+            this.ctx.lineWidth = 5;
+            this.ctx.stroke();
+
+            this.ctx.beginPath();
+            this.ctx.arc(rh.x, rh.y, 40, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * progress));
+            this.ctx.strokeStyle = "#00ff00";
+            this.ctx.lineWidth = 5;
+            this.ctx.stroke();
+
+            if (progress > 0.1) {
+                this.ctx.fillStyle = "white";
+                this.ctx.font = "bold 12px Outfit";
+                this.ctx.textAlign = "center";
+                this.ctx.fillText("HOLDING", rh.x, rh.y + 5);
+                this.ctx.textAlign = "left";
+            }
+        }
     }
 
     drawBoundingBox() {

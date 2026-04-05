@@ -44,7 +44,9 @@ export const sampleBeatmap = {
 };
 
 export const maps = [
-    { id: 'neon', title: "NEON DANCE", difficulty: "HARD", bpm: 128 },
-    { id: 'zenith', title: "ZENITH REACH", difficulty: "INSANE", bpm: 160 },
-    { id: 'pulse', title: "PULSE WAVE", difficulty: "EXPERT", bpm: 145 }
+    { id: 'neon', title: "NEON DANCE", artist: "Digital Spirit", difficulty: "HARD", bpm: 128 },
+    { id: 'zenith', title: "ZENITH REACH", artist: "Cyber Dream", difficulty: "INSANE", bpm: 160 },
+    { id: 'pulse', title: "PULSE WAVE", artist: "Neon Heart", difficulty: "EXPERT", bpm: 145 },
+    { id: 'electro', title: "ELECTRO SHOCK", artist: "Volt Rider", difficulty: "NORMAL", bpm: 110 },
+    { id: 'void', title: "VOID RUNNER", artist: "Deep Space", difficulty: "IMPOSSIBLE", bpm: 180 }
 ];
