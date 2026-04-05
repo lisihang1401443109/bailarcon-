@@ -39,17 +39,20 @@ class Circle {
         const timeDiff = Math.abs(currentTime - this.data.time);
         if (timeDiff <= 150) {
             const targetIndices = TARGET_MAP[this.data.target];
+            const targetX = (this.data.x / 1000) * this.game.canvas.width;
+            const targetY = (this.data.y / 1000) * this.game.canvas.height;
+
             const isHit = targetIndices.some(idx => {
                 const lm = this.game.smoothLandmarks[idx];
                 if (!lm) return false;
-                const dist = Math.hypot(lm.x - this.data.x, lm.y - this.data.y);
-                return dist < 80; // 80px radius
+                const dist = Math.hypot(lm.x - targetX, lm.y - targetY);
+                return dist < 80;
             });
 
             if (isHit) {
                 this.hit = true;
                 const result = timeDiff < 80 ? 'PERFECT' : 'GOOD';
-                this.game.handleHit(result, { x: this.data.x, y: this.data.y });
+                this.game.handleHit(result, { x: targetX, y: targetY });
             }
         }
     }
@@ -111,11 +114,14 @@ class Slider {
         // Active State Check (During the slide duration)
         if (currentTime >= this.data.time && currentTime <= this.data.time + this.data.duration) {
             const headP = this.getPointAt(currentTime);
+            const targetX = (headP.x / 1000) * this.game.canvas.width;
+            const targetY = (headP.y / 1000) * this.game.canvas.height;
+
             const targetIndices = TARGET_MAP[this.data.target];
             const isTouching = targetIndices.some(idx => {
                 const lm = this.game.smoothLandmarks[idx];
                 if (!lm) return false;
-                return Math.hypot(lm.x - headP.x, lm.y - headP.y) < 100; // Larger window for sliders
+                return Math.hypot(lm.x - targetX, lm.y - targetY) < 100;
             });
 
             if (isTouching) {
