@@ -916,36 +916,46 @@ class Game {
 
     drawResults() {
         const frame = this.getUserFrame();
-        const cx = frame.x;
-        const cy = frame.y;
+
+        // Absolute Screen Center for Text
+        const absX = this.canvas.width / 2;
+        const absY = this.canvas.height / 2;
+
+        // Relative Body Center for Buttons
+        const relX = frame.x;
+        const relY = frame.y;
 
         this.ctx.fillStyle = "rgba(0,0,0,0.85)";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         this.ctx.textAlign = "center";
+
+        // STAGE CLEAR (Absolute)
         this.ctx.fillStyle = "#00ffff";
-        this.ctx.font = `bold ${frame.scale * 0.06}px Outfit`;
-        this.ctx.fillText("STAGE CLEAR", cx, cy - (frame.scale * 0.2));
+        this.ctx.font = "bold 60px Outfit";
+        this.ctx.fillText("STAGE CLEAR", absX, absY - 200);
 
+        // SCORE (Absolute)
         this.ctx.fillStyle = "white";
-        this.ctx.font = `bold ${frame.scale * 0.12}px Outfit`;
-        this.ctx.fillText(Math.floor(this.score).toString(), cx, cy - (frame.scale * 0.05));
+        this.ctx.font = "bold 100px Outfit";
+        this.ctx.fillText(Math.floor(this.score).toString(), absX, absY - 50);
 
-        this.ctx.font = `bold ${frame.scale * 0.03}px Outfit`;
+        // STATS (Absolute)
+        this.ctx.font = "bold 24px Outfit";
         this.ctx.fillStyle = "#aaaaaa";
-        this.ctx.fillText(`MAX COMBO: ${this.maxCombo} | ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, cx, cy + (frame.scale * 0.05));
+        this.ctx.fillText(`MAX COMBO: ${this.maxCombo} | ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, absX, absY + 20);
 
-        // Draw Menu Buttons
-        const buttonWidth = frame.scale * 0.3;
+        // Draw Menu Buttons (Relative to User Frame)
+        const buttonWidth = frame.scale * 0.35;
         const buttonHeight = 60;
         const buttons = [
-            { id: 'RETRY', label: "RETRY STAGE", y: cy + 100 },
-            { id: 'RETURN', label: "BACK TO LOBBY", y: cy + 180 }
+            { id: 'RETRY', label: "RETRY STAGE", y: relY + 100 },
+            { id: 'RETURN', label: "BACK TO LOBBY", y: relY + 180 }
         ];
 
         buttons.forEach((btn, i) => {
             const isHovered = i === this.resultDwellIdx;
-            const bx = cx - (buttonWidth / 2);
+            const bx = relX - (buttonWidth / 2);
 
             this.ctx.fillStyle = isHovered ? "rgba(0, 255, 255, 0.3)" : "rgba(255, 255, 255, 0.1)";
             this.ctx.strokeStyle = isHovered ? "#00ffff" : "rgba(255,255,255,0.3)";
@@ -957,7 +967,7 @@ class Game {
 
             this.ctx.fillStyle = "white";
             this.ctx.font = "bold 20px Outfit";
-            this.ctx.fillText(btn.label, cx, btn.y + 38);
+            this.ctx.fillText(btn.label, relX, btn.y + 38);
 
             // Progress Bar if hovering
             if (isHovered && this.resultDwellStart) {
