@@ -165,7 +165,7 @@ class Game {
 
         // Phase 3: Gesture History
         this.handVelocity = { 15: { vx: 0, vy: 0, vz: 0 }, 16: { vx: 0, vy: 0, vz: 0 } };
-        this.handPath = { 15: [], 16: [] }; // Last 30 frames for circle detection
+        this.handPath = { 15: [], 16: [] }; // Last 10-30 frames
         this.lastGesture = "NONE";
         this.gestureTime = 0;
 
@@ -252,7 +252,7 @@ class Game {
                     this.detectGestures();
                 }
 
-                if (this.screen === SCREENS.LOBBY && this.lastGesture === "STIR") {
+                if (this.screen === SCREENS.LOBBY && this.lastGesture === "SWIPE RIGHT") {
                     this.startGame();
                 }
 
@@ -411,8 +411,8 @@ class Game {
             maxY = Math.max(maxY, lm.y);
         });
 
-        this.ctx.strokeStyle = this.lastGesture === 'STIR' ? '#00ff00' : 'white';
-        this.ctx.lineWidth = this.lastGesture === 'STIR' ? 5 : 2;
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 2;
         this.ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
 
@@ -478,36 +478,16 @@ class Game {
 
                 if (Math.abs(this.handVelocity[idx].vy) > SWIPE_VEL) {
                     const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
-                    const totalY = lm.y - samplePoint.y;
-                    if (Math.abs(totalY) > SWIPE_DIST) {
+                    const totalY = lm.y * this.canvas.height - samplePoint.y * this.canvas.height;
+                    const SWIPE_DIST_PX = 100;
+                    if (Math.abs(totalY) > SWIPE_DIST_PX) {
                         this.triggerGesture(totalY > 0 ? "SWIPE DOWN" : "SWIPE UP");
-                    }
-                }
-            }
-
-            // STIRRING DETECTION (Circle)
-            if (this.handPath[idx].length === 30) {
-                let minX = 1, maxX = 0, minY = 1, maxY = 0;
-                this.handPath[idx].forEach(p => {
-                    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-                    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-                });
-                const w = maxX - minX, h = maxY - minY;
-                // If it's a "box" roughly square and not too tiny
-                if (w > 0.05 && h > 0.05 && Math.abs(w - h) < 0.1) {
-                    // Check if points wrap around center (simple heuristic: total distance vs radius)
-                    let totalDist = 0;
-                    for (let i = 0; i < 29; i++) {
-                        totalDist += Math.hypot(this.handPath[idx][i].x - this.handPath[idx][i + 1].x, this.handPath[idx][i].y - this.handPath[idx][i + 1].y);
-                    }
-                    const perimeter = Math.PI * (w + h) / 2;
-                    if (totalDist > perimeter * 0.8 && totalDist < perimeter * 2.0) {
-                        this.triggerGesture("STIR");
                     }
                 }
             }
         });
 
+        // Save current positions for next frame delta
         this.lastPos = {
             15: { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z },
             16: { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z }
