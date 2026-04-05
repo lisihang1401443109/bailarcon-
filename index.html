@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BailarCon - TOTAL LOCAL</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- NO EXTERNAL SCRIPTS - ALL LOCAL -->
+</head>
+
+<body>
+    <div id="app">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="gameCanvas"></canvas>
+        <div id="ui-overlay">
+            <div id="hud">
+                <div id="score-container">
+                    <span class="label">SCORE</span>
+                    <span id="score">00000000</span>
+                </div>
+                <div id="accuracy-container">
+                    <span id="accuracy">100.00%</span>
+                </div>
+                <div id="combo-container">
+                    <span id="combo">0</span>x
+                </div>
+            </div>
+            <div id="start-screen">
+                <div class="glass-card">
+                    <h1>BailarCon</h1>
+                    <p id="status-msg">Loading Local AI Core...</p>
+                    <div id="loading-bar"></div>
+                </div>
+            </div>
+        </div>
+        <div id="error-box"></div>
+    </div>
+    <!-- Load main.js as a module to handle imports -->
+    <script type="module" src="main.js"></script>
+</body>
+
+</html>
