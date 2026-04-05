@@ -308,13 +308,17 @@ class Game {
         this.selectedMap = this.maps[this.selectedMapIdx];
         this.screen = SCREENS.PRE_START;
         this.preStartHoldTime = 0;
+        this.countdownValue = 3;
+        console.log("LEVEL SELECTED:", this.selectedMap.title, "ENTERING PRE_START");
 
-        // Prepare game data but don't start clock yet
+        // Prepare game data
         this.score = 0; this.combo = 0; this.hits = 0; this.totalObjectsCount = 0;
         this.objects = this.selectedMap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
         this.totalObjects = this.objects.length;
         this.activeObjects = [];
         this.hitFeedback = [];
+        // Ensure gameStartTime is NOT set yet
+        this.gameStartTime = undefined;
     }
 
     startActualGameplay() {
@@ -619,11 +623,13 @@ class Game {
             const cardWidth = 300;
             const spacing = 40;
             const centerX = this.canvas.width / 2;
-            const startX = centerX - (this.selectedMapIdx * (cardWidth + spacing));
+            // START X calculation mirrored from drawMenu
+            if (this.currentScroll === undefined) this.currentScroll = this.selectedMapIdx;
+            const startX = (this.canvas.width / 2) - (this.currentScroll * (cardWidth + spacing)) - (cardWidth / 2);
 
             this.maps.forEach((map, i) => {
                 const itemX = startX + (i * (cardWidth + spacing));
-                const itemY = this.canvas.height / 2 - 100;
+                const itemY = (this.canvas.height / 2) - 100;
 
                 if (rh.x > itemX && rh.x < itemX + cardWidth && rh.y > itemY && rh.y < itemY + 200) {
                     foundHover = i;
@@ -632,7 +638,9 @@ class Game {
 
             if (foundHover !== -1 && foundHover === this.dwellIdx) {
                 this.dwellTime += 16;
-                if (this.dwellTime >= 600) { // Reduced to 0.6s
+                // Visual Dwell Feedback
+                if (this.dwellTime >= 600) {
+                    console.log("MENU SELECTION CONFIRMED: SONG ID", this.maps[foundHover].id);
                     this.startGame();
                     this.dwellTime = 0;
                 }
@@ -766,15 +774,24 @@ class Game {
         const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
         const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
 
+        const lh = this.smoothLandmarks[15];
+        const rh = this.smoothLandmarks[16];
+
         [leftTarget, rightTarget].forEach((t, i) => {
+            const hand = i === 0 ? lh : rh;
+            const isInside = hand && Math.hypot(hand.x - t.x, hand.y - t.y) < 100;
+
             this.ctx.beginPath();
             this.ctx.arc(t.x, t.y, 80, 0, Math.PI * 2);
-            this.ctx.strokeStyle = "rgba(255,255,255,0.4)";
+            this.ctx.strokeStyle = isInside ? "#00ff00" : "rgba(255,255,255,0.4)";
+            this.ctx.shadowBlur = isInside ? 20 : 0;
+            this.ctx.shadowColor = "#00ff00";
             this.ctx.lineWidth = 8;
             this.ctx.stroke();
+            this.ctx.shadowBlur = 0; // Reset shadow
 
             // Progress Fill
-            if (this.preStartHoldTime > 0) {
+            if (this.preStartHoldTime > 0 && isInside) {
                 const p = Math.min(1, this.preStartHoldTime / 2000);
                 this.ctx.beginPath();
                 this.ctx.arc(t.x, t.y, 80, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p));
@@ -782,7 +799,7 @@ class Game {
                 this.ctx.stroke();
             }
 
-            this.ctx.fillStyle = "white";
+            this.ctx.fillStyle = isInside ? "#00ff00" : "white";
             this.ctx.font = "bold 20px Outfit";
             this.ctx.textAlign = "center";
             this.ctx.fillText(i === 0 ? "LEFT" : "RIGHT", t.x, t.y + 7);
