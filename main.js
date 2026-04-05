@@ -630,177 +630,174 @@ class Game {
         }
     }
 
-}
+    drawResults() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.8)";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#00ffff";
+        this.ctx.font = "bold 60px Outfit";
+        this.ctx.fillText("STAGE CLEAR", cx, cy - 200);
+
+        this.ctx.fillStyle = "white";
+        this.ctx.font = "bold 100px Outfit";
+        this.ctx.fillText(Math.floor(this.score).toString(), cx, cy - 50);
+
+        this.ctx.font = "bold 30px Outfit";
+        this.ctx.fillStyle = "#aaaaaa";
+        this.ctx.fillText(`MAX COMBO: ${this.maxCombo}`, cx, cy + 50);
+        this.ctx.fillText(`ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, cx, cy + 100);
+
+        this.ctx.fillStyle = "#00ff00";
+        this.ctx.font = "bold 24px Outfit";
+        this.ctx.fillText("SWIPE RIGHT TO RETURN TO LOBBY", cx, cy + 250);
+
+        this.ctx.textAlign = "left";
     }
 
-drawResults() {
-    const cx = this.canvas.width / 2;
-    const cy = this.canvas.height / 2;
+    drawBoundingBox() {
+        if (this.smoothLandmarks.length < 33) return;
+        let minX = this.canvas.width, minY = this.canvas.height, maxX = 0, maxY = 0;
+        this.smoothLandmarks.forEach(lm => {
+            minX = Math.min(minX, lm.x);
+            minY = Math.min(minY, lm.y);
+            maxX = Math.max(maxX, lm.x);
+            maxY = Math.max(maxY, lm.y);
+        });
 
-    this.ctx.fillStyle = "rgba(0,0,0,0.8)";
-    this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-    this.ctx.textAlign = "center";
-    this.ctx.fillStyle = "#00ffff";
-    this.ctx.font = "bold 60px Outfit";
-    this.ctx.fillText("STAGE CLEAR", cx, cy - 200);
-
-    this.ctx.fillStyle = "white";
-    this.ctx.font = "bold 100px Outfit";
-    this.ctx.fillText(Math.floor(this.score).toString(), cx, cy - 50);
-
-    this.ctx.font = "bold 30px Outfit";
-    this.ctx.fillStyle = "#aaaaaa";
-    this.ctx.fillText(`MAX COMBO: ${this.maxCombo}`, cx, cy + 50);
-    this.ctx.fillText(`ACCURACY: ${Math.round((this.hits / this.totalObjectsCount) * 100)}%`, cx, cy + 100);
-
-    this.ctx.fillStyle = "#00ff00";
-    this.ctx.font = "bold 24px Outfit";
-    this.ctx.fillText("SWIPE RIGHT TO RETURN TO LOBBY", cx, cy + 250);
-
-    this.ctx.textAlign = "left";
-}
-
-drawBoundingBox() {
-    if (this.smoothLandmarks.length < 33) return;
-    let minX = this.canvas.width, minY = this.canvas.height, maxX = 0, maxY = 0;
-    this.smoothLandmarks.forEach(lm => {
-        minX = Math.min(minX, lm.x);
-        minY = Math.min(minY, lm.y);
-        maxX = Math.max(maxX, lm.x);
-        maxY = Math.max(maxY, lm.y);
-    });
-
-    this.ctx.strokeStyle = 'white';
-    this.ctx.lineWidth = 2;
-    this.ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
-}
-
-stabilizeSkeleton() {
-    const LERP = 0.25; // Smoothing factor
-    if (!this.landmarks) return;
-
-    if (this.smoothLandmarks.length < 33) {
-        this.smoothLandmarks = this.landmarks.map(lm => ({
-            x: (1 - lm.x) * this.canvas.width,
-            y: lm.y * this.canvas.height
-        }));
-    } else {
-        for (let i = 0; i < 33; i++) {
-            const targetX = (1 - this.landmarks[i].x) * this.canvas.width;
-            const targetY = this.landmarks[i].y * this.canvas.height;
-            this.smoothLandmarks[i].x += (targetX - this.smoothLandmarks[i].x) * LERP;
-            this.smoothLandmarks[i].y += (targetY - this.smoothLandmarks[i].y) * LERP;
-        }
+        this.ctx.strokeStyle = 'white';
+        this.ctx.lineWidth = 2;
+        this.ctx.strokeRect(minX, minY, maxX - minX, maxY - minY);
     }
-}
 
-updateTrails() {
-    [15, 16, 27, 28].forEach(idx => {
-        const lm = this.smoothLandmarks[idx];
-        if (lm) {
-            this.trails[idx].unshift({ x: lm.x, y: lm.y });
-            if (this.trails[idx].length > 40) this.trails[idx].pop();
+    stabilizeSkeleton() {
+        const LERP = 0.25; // Smoothing factor
+        if (!this.landmarks) return;
+
+        if (this.smoothLandmarks.length < 33) {
+            this.smoothLandmarks = this.landmarks.map(lm => ({
+                x: (1 - lm.x) * this.canvas.width,
+                y: lm.y * this.canvas.height
+            }));
         } else {
-            this.trails[idx] = [];
-        }
-    });
-}
-
-detectGestures() {
-    const hands = [16];
-    hands.forEach(idx => {
-        const lm = this.landmarks[idx];
-        if (!lm) return;
-
-        this.handPath[idx].unshift({ x: lm.x, y: lm.y });
-        if (this.handPath[idx].length > 30) this.handPath[idx].pop();
-
-        if (this.lastPos && this.lastPos[idx]) {
-            const dx = lm.x - this.lastPos[idx].x;
-            const dy = lm.y - this.lastPos[idx].y;
-
-            this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.8 + dx * 0.2;
-            this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
-
-            // TUNED SENSITIVITY: 10-frame window for snappier swipes
-            const SWIPE_VEL = 0.04;
-            const SWIPE_DIST = 0.1;
-
-            if (Math.abs(this.handVelocity[idx].vx) > SWIPE_VEL) {
-                const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
-                const totalX = lm.x - samplePoint.x;
-                if (Math.abs(totalX) > SWIPE_DIST) {
-                    // MIRROR FIX: Moving toward 0 (Left on camera) is "Right" for mirrored user
-                    this.triggerGesture(totalX < 0 ? "SWIPE RIGHT" : "SWIPE LEFT");
-                }
-            }
-
-            if (Math.abs(this.handVelocity[idx].vy) > SWIPE_VEL) {
-                const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
-                const totalY = lm.y * this.canvas.height - samplePoint.y * this.canvas.height;
-                const SWIPE_DIST_PX = 100;
-                if (Math.abs(totalY) > SWIPE_DIST_PX) {
-                    this.triggerGesture(totalY > 0 ? "SWIPE DOWN" : "SWIPE UP");
-                }
+            for (let i = 0; i < 33; i++) {
+                const targetX = (1 - this.landmarks[i].x) * this.canvas.width;
+                const targetY = this.landmarks[i].y * this.canvas.height;
+                this.smoothLandmarks[i].x += (targetX - this.smoothLandmarks[i].x) * LERP;
+                this.smoothLandmarks[i].y += (targetY - this.smoothLandmarks[i].y) * LERP;
             }
         }
-    });
-
-    // Save current positions for next frame delta
-    this.lastPos = {
-        15: { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z },
-        16: { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z }
-    };
-}
-
-triggerGesture(name) {
-    // Cooldown: Don't trigger multiple in 200ms
-    if (Date.now() - this.gestureTime < 200) return;
-
-    this.lastGesture = name;
-    this.gestureTime = Date.now();
-    console.log("GESTURE DETECTED:", name);
-}
-
-drawTrails() {
-    this.ctx.save();
-    this.ctx.lineCap = 'round';
-    this.ctx.lineJoin = 'round';
-
-    [15, 16, 27, 28].forEach(idx => {
-        const history = this.trails[idx];
-        if (history.length < 2) return;
-
-        const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
-
-        // Pass 1: Massive Outer Glow - Faster Fade (Power 3)
-        this.ctx.lineWidth = 40;
-        this.ctx.shadowBlur = 30;
-        this.ctx.shadowColor = color;
-        this.renderPath(history, color, 0.4, 3.0);
-
-        // Pass 2: Bright Inner Core - Faster Fade (Power 2)
-        this.ctx.lineWidth = 12;
-        this.ctx.shadowBlur = 0;
-        this.renderPath(history, '#ffffff', 0.8, 2.0);
-    });
-    this.ctx.restore();
-}
-
-renderPath(history, color, baseAlpha, power = 1) {
-    for (let i = 0; i < history.length - 1; i++) {
-        const p1 = history[i], p2 = history[i + 1];
-        // Non-linear fade for smoother "tail"
-        const alpha = Math.pow(1 - (i / history.length), power) * baseAlpha;
-        this.ctx.globalAlpha = alpha;
-        this.ctx.strokeStyle = color;
-        this.ctx.beginPath();
-        this.ctx.moveTo(p1.x, p1.y);
-        this.ctx.lineTo(p2.x, p2.y);
-        this.ctx.stroke();
     }
-}
+
+    updateTrails() {
+        [15, 16, 27, 28].forEach(idx => {
+            const lm = this.smoothLandmarks[idx];
+            if (lm) {
+                this.trails[idx].unshift({ x: lm.x, y: lm.y });
+                if (this.trails[idx].length > 40) this.trails[idx].pop();
+            } else {
+                this.trails[idx] = [];
+            }
+        });
+    }
+
+    detectGestures() {
+        const hands = [16];
+        hands.forEach(idx => {
+            const lm = this.landmarks[idx];
+            if (!lm) return;
+
+            this.handPath[idx].unshift({ x: lm.x, y: lm.y });
+            if (this.handPath[idx].length > 30) this.handPath[idx].pop();
+
+            if (this.lastPos && this.lastPos[idx]) {
+                const dx = lm.x - this.lastPos[idx].x;
+                const dy = lm.y - this.lastPos[idx].y;
+
+                this.handVelocity[idx].vx = this.handVelocity[idx].vx * 0.8 + dx * 0.2;
+                this.handVelocity[idx].vy = this.handVelocity[idx].vy * 0.8 + dy * 0.2;
+
+                // TUNED SENSITIVITY: 10-frame window for snappier swipes
+                const SWIPE_VEL = 0.04;
+                const SWIPE_DIST = 0.1;
+
+                if (Math.abs(this.handVelocity[idx].vx) > SWIPE_VEL) {
+                    const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
+                    const totalX = lm.x - samplePoint.x;
+                    if (Math.abs(totalX) > SWIPE_DIST) {
+                        // MIRROR FIX: Moving toward 0 (Left on camera) is "Right" for mirrored user
+                        this.triggerGesture(totalX < 0 ? "SWIPE RIGHT" : "SWIPE LEFT");
+                    }
+                }
+
+                if (Math.abs(this.handVelocity[idx].vy) > SWIPE_VEL) {
+                    const samplePoint = this.handPath[idx][9] || this.handPath[idx][this.handPath[idx].length - 1];
+                    const totalY = lm.y * this.canvas.height - samplePoint.y * this.canvas.height;
+                    const SWIPE_DIST_PX = 100;
+                    if (Math.abs(totalY) > SWIPE_DIST_PX) {
+                        this.triggerGesture(totalY > 0 ? "SWIPE DOWN" : "SWIPE UP");
+                    }
+                }
+            }
+        });
+
+        // Save current positions for next frame delta
+        this.lastPos = {
+            15: { x: this.landmarks[15].x, y: this.landmarks[15].y, z: this.landmarks[15].z },
+            16: { x: this.landmarks[16].x, y: this.landmarks[16].y, z: this.landmarks[16].z }
+        };
+    }
+
+    triggerGesture(name) {
+        // Cooldown: Don't trigger multiple in 200ms
+        if (Date.now() - this.gestureTime < 200) return;
+
+        this.lastGesture = name;
+        this.gestureTime = Date.now();
+        console.log("GESTURE DETECTED:", name);
+    }
+
+    drawTrails() {
+        this.ctx.save();
+        this.ctx.lineCap = 'round';
+        this.ctx.lineJoin = 'round';
+
+        [15, 16, 27, 28].forEach(idx => {
+            const history = this.trails[idx];
+            if (history.length < 2) return;
+
+            const color = [15, 16].includes(idx) ? '#00ffff' : '#ff00ff';
+
+            // Pass 1: Massive Outer Glow - Faster Fade (Power 3)
+            this.ctx.lineWidth = 40;
+            this.ctx.shadowBlur = 30;
+            this.ctx.shadowColor = color;
+            this.renderPath(history, color, 0.4, 3.0);
+
+            // Pass 2: Bright Inner Core - Faster Fade (Power 2)
+            this.ctx.lineWidth = 12;
+            this.ctx.shadowBlur = 0;
+            this.renderPath(history, '#ffffff', 0.8, 2.0);
+        });
+        this.ctx.restore();
+    }
+
+    renderPath(history, color, baseAlpha, power = 1) {
+        for (let i = 0; i < history.length - 1; i++) {
+            const p1 = history[i], p2 = history[i + 1];
+            // Non-linear fade for smoother "tail"
+            const alpha = Math.pow(1 - (i / history.length), power) * baseAlpha;
+            this.ctx.globalAlpha = alpha;
+            this.ctx.strokeStyle = color;
+            this.ctx.beginPath();
+            this.ctx.moveTo(p1.x, p1.y);
+            this.ctx.lineTo(p2.x, p2.y);
+            this.ctx.stroke();
+        }
+    }
 }
 
 new Game();
