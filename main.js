@@ -2,7 +2,7 @@
 // 100% Offline: No CDNs, No Internet required.
 
 import { PoseLandmarker, FilesetResolver } from "./vision_bundle.js";
-import { sampleBeatmap } from "./beatmap.js";
+import { sampleBeatmap, maps } from "./beatmap.js";
 
 const SCREENS = { LOBBY: 'lobby', PLAYING: 'playing', RESULTS: 'results' };
 const TARGET_MAP = {
