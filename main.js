@@ -309,15 +309,19 @@ class Game {
         this.screen = SCREENS.PRE_START;
         this.preStartHoldTime = 0;
         this.countdownValue = 3;
+        this.lastDwellTime = performance.now(); // Initialize timer
+
         console.log("LEVEL SELECTED:", this.selectedMap.title, "ENTERING PRE_START");
 
         // Prepare game data
-        this.score = 0; this.combo = 0; this.hits = 0; this.totalObjectsCount = 0;
+        this.score = 0; this.combo = 0; this.hits = 0;
         this.objects = this.selectedMap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
         this.totalObjects = this.objects.length;
+        this.totalObjectsCount = this.objects.length; // Correct initialization
+        this.lastObjectTime = Math.max(...this.objects.map(o => o.data.time), 0);
+
         this.activeObjects = [];
         this.hitFeedback = [];
-        // Ensure gameStartTime is NOT set yet
         this.gameStartTime = undefined;
     }
 
@@ -409,6 +413,7 @@ class Game {
     }
 
     updatePreStartLogic() {
+        const now = performance.now();
         const lh = this.smoothLandmarks[15];
         const rh = this.smoothLandmarks[16];
 
@@ -416,20 +421,25 @@ class Game {
             const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
             const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
 
-            const inLeft = Math.hypot(lh.x - leftTarget.x, lh.y - leftTarget.y) < 100;
-            const inRight = Math.hypot(rh.x - rightTarget.x, rh.y - rightTarget.y) < 100;
+            const inLeft = Math.hypot(lh.x - leftTarget.x, lh.y - leftTarget.y) < 120; // Increased tolerance
+            const inRight = Math.hypot(rh.x - rightTarget.x, rh.y - rightTarget.y) < 120;
 
             if (inLeft && inRight) {
-                this.preStartHoldTime += 16;
+                if (!this.holdStartTime) this.holdStartTime = now;
+                this.preStartHoldTime = now - this.holdStartTime;
+
                 if (this.preStartHoldTime >= 2000) {
                     console.log("HANDS CONFIRMED: ENTERING COUNTDOWN");
                     this.screen = SCREENS.COUNTDOWN;
-                    this.countdownStartTime = performance.now();
+                    this.countdownStartTime = now;
+                    this.holdStartTime = null;
                 }
             } else {
+                this.holdStartTime = null;
                 this.preStartHoldTime = 0;
             }
         } else {
+            this.holdStartTime = null;
             this.preStartHoldTime = 0;
         }
     }
@@ -637,15 +647,19 @@ class Game {
             });
 
             if (foundHover !== -1 && foundHover === this.dwellIdx) {
-                this.dwellTime += 16;
-                // Visual Dwell Feedback
-                if (this.dwellTime >= 600) {
+                const now = performance.now();
+                if (!this.dwellStart) this.dwellStart = now;
+                this.dwellTime = now - this.dwellStart;
+
+                if (this.dwellTime >= 800) { // Slightly longer for stability
                     console.log("MENU SELECTION CONFIRMED: SONG ID", this.maps[foundHover].id);
                     this.startGame();
+                    this.dwellStart = null;
                     this.dwellTime = 0;
                 }
             } else {
                 this.dwellIdx = foundHover;
+                this.dwellStart = null;
                 this.dwellTime = 0;
             }
         }
@@ -710,6 +724,11 @@ class Game {
             this.ctx.fillText(`${map.difficulty}`, itemX + 20, itemY + 140);
             this.ctx.fillText(`${map.bpm} BPM`, itemX + 20, itemY + 170);
 
+            // DEBUG: HITBOX VISUALIZER (Magenta rectangle)
+            this.ctx.strokeStyle = "rgba(255, 0, 255, 0.5)";
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(itemX, itemY, cardWidth, cardHeight);
+
             this.ctx.restore();
         });
 
@@ -757,15 +776,26 @@ class Game {
         const cx = this.canvas.width / 2;
         const cy = this.canvas.height / 2;
 
-        this.ctx.fillStyle = "rgba(0,0,0,0.6)";
+        this.ctx.fillStyle = "rgba(0,0,0,0.8)";
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Global Progress Bar (Top)
+        if (this.preStartHoldTime > 0) {
+            const p = Math.min(1, this.preStartHoldTime / 2000);
+            this.ctx.fillStyle = "rgba(255,255,255,0.2)";
+            this.ctx.fillRect(0, 0, this.canvas.width, 20);
+            this.ctx.fillStyle = "#00ffff";
+            this.ctx.fillRect(0, 0, this.canvas.width * p, 20);
+        }
 
         this.ctx.textAlign = "center";
         this.ctx.fillStyle = "white";
-        this.ctx.font = "bold 40px Outfit";
-        this.ctx.fillText("PREPARING STAGE...", cx, cy - 250);
-        this.ctx.font = "20px Outfit";
-        this.ctx.fillText("HOLD BOTH HANDS TO CONFIRM START", cx, cy - 200);
+        this.ctx.font = "bold 50px Outfit";
+        this.ctx.fillText("PREPARING STAGE", cx, cy - 200);
+
+        this.ctx.font = "24px Outfit";
+        this.ctx.fillStyle = "#00ffff";
+        this.ctx.fillText("HOLD BOTH HANDS IN THE CIRCLES FOR 2 SECONDS", cx, cy + 250);
 
         this.drawHandTargets();
     }
