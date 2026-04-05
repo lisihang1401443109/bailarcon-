@@ -39,7 +39,50 @@ export const sampleBeatmap = {
         { id: 15, type: 'circle', time: 9200, x: 900, y: 900, target: 'FOOT' },
         { id: 16, type: 'circle', time: 9400, x: 100, y: 900, target: 'FOOT' },
         { id: 17, type: 'circle', time: 9600, x: 900, y: 100, target: 'HAND' },
-        { id: 18, type: 'circle', time: 10000, x: 500, y: 500, target: 'HAND' }
+        { id: 18, type: 'circle', time: 10000, x: 500, y: 500, target: 'HAND' },
+
+        // New Extended Section (12-30s)
+        { id: 19, type: 'circle', time: 12000, x: 200, y: 200, target: 'HAND' },
+        { id: 20, type: 'circle', time: 12500, x: 800, y: 200, target: 'HAND' },
+        { id: 21, type: 'circle', time: 13000, x: 200, y: 800, target: 'FOOT' },
+        { id: 22, type: 'circle', time: 13500, x: 800, y: 800, target: 'FOOT' },
+
+        {
+            id: 23, type: 'slider', time: 15000, duration: 2000, target: 'HAND',
+            points: [{ x: 500, y: 100 }, { x: 500, y: 500 }, { x: 500, y: 900 }]
+        },
+
+        { id: 24, type: 'circle', time: 18000, x: 100, y: 500, target: 'HAND' },
+        { id: 25, type: 'circle', time: 18300, x: 300, y: 500, target: 'HAND' },
+        { id: 26, type: 'circle', time: 18600, x: 500, y: 500, target: 'HAND' },
+        { id: 27, type: 'circle', time: 18900, x: 700, y: 500, target: 'HAND' },
+        { id: 28, type: 'circle', time: 19200, x: 900, y: 500, target: 'HAND' },
+
+        { id: 29, type: 'circle', time: 21000, x: 500, y: 300, target: 'HAND' },
+        { id: 30, type: 'circle', time: 21500, x: 500, y: 700, target: 'FOOT' },
+        { id: 31, type: 'circle', time: 22000, x: 300, y: 500, target: 'HAND' },
+        { id: 32, type: 'circle', time: 22500, x: 700, y: 500, target: 'HAND' },
+
+        {
+            id: 33, type: 'slider', time: 25000, duration: 3000, target: 'HAND',
+            points: [{ x: 100, y: 100 }, { x: 900, y: 100 }, { x: 900, y: 900 }, { x: 100, y: 900 }]
+        },
+
+        // Final Rush (30-40s)
+        { id: 34, type: 'circle', time: 30000, x: 200, y: 200, target: 'HAND' },
+        { id: 35, type: 'circle', time: 30200, x: 300, y: 300, target: 'HAND' },
+        { id: 36, type: 'circle', time: 30400, x: 400, y: 400, target: 'HAND' },
+        { id: 37, type: 'circle', time: 30600, x: 500, y: 500, target: 'HAND' },
+        { id: 38, type: 'circle', time: 30800, x: 600, y: 600, target: 'HAND' },
+        { id: 39, type: 'circle', time: 31000, x: 700, y: 700, target: 'HAND' },
+
+        { id: 40, type: 'circle', time: 33000, x: 500, y: 200, target: 'HAND' },
+        { id: 41, type: 'circle', time: 33500, x: 500, y: 800, target: 'FOOT' },
+        { id: 42, type: 'circle', time: 34000, x: 100, y: 500, target: 'HAND' },
+        { id: 43, type: 'circle', time: 34500, x: 900, y: 500, target: 'HAND' },
+
+        { id: 44, type: 'circle', time: 37000, x: 500, y: 500, target: 'HAND' },
+        { id: 45, type: 'circle', time: 38000, x: 500, y: 500, target: 'HAND' }
     ]
 };
 

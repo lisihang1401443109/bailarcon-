@@ -4,7 +4,7 @@
 import { PoseLandmarker, FilesetResolver } from "./vision_bundle.js";
 import { sampleBeatmap, maps } from "./beatmap.js";
 
-const SCREENS = { LOBBY: 'lobby', PLAYING: 'playing', RESULTS: 'results' };
+const SCREENS = { APP_START: 'appstart', LOBBY: 'lobby', PRE_START: 'prestart', COUNTDOWN: 'countdown', PLAYING: 'playing', RESULTS: 'results' };
 const TARGET_MAP = {
     'HAND': [15, 16, 19, 20], // Wrists, Index fingers
     'FOOT': [27, 28, 31, 32]  // Ankles, Toes
@@ -240,6 +240,10 @@ class Game {
         this.dwellIdx = -1;
         this.maps = maps;
 
+        // New Logic
+        this.preStartHoldTime = 0;
+        this.countdownValue = 3;
+
         window.onerror = (m, u, l) => { this.showError(`FATAL: ${m} @ ${u}:${l}`); return false; };
         this.init();
     }
@@ -290,9 +294,7 @@ class Game {
             });
 
             this.debugMsg = "LOCAL AI ONLINE.";
-            this.objects = sampleBeatmap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
-            this.activeObjects = [];
-            this.screen = SCREENS.LOBBY;
+            this.screen = SCREENS.APP_START;
             this.startScreen.style.display = 'none';
             this.processLoop();
         } catch (err) {
@@ -302,14 +304,22 @@ class Game {
     }
 
     startGame() {
-        const selectedMap = this.maps[this.selectedMapIdx];
-        console.log(`STARTING MAP: ${selectedMap.title}`);
-        this.screen = SCREENS.PLAYING;
-        // ...
-        this.gameStartTime = performance.now();
-        this.score = 0; this.combo = 0; this.hits = 0; this.totalObjects = 0;
-        this.objects = sampleBeatmap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
+        this.selectedMap = this.maps[this.selectedMapIdx];
+        this.screen = SCREENS.PRE_START;
+        this.preStartHoldTime = 0;
+
+        // Prepare game data but don't start clock yet
+        this.score = 0; this.combo = 0; this.hits = 0; this.totalObjectsCount = 0;
+        this.objects = this.selectedMap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
+        this.totalObjects = this.objects.length;
         this.activeObjects = [];
+        this.hitFeedback = [];
+    }
+
+    startActualGameplay() {
+        this.screen = SCREENS.PLAYING;
+        this.gameStartTime = performance.now();
+        console.log("GAMEPLAY STARTED");
     }
 
     processLoop() {
@@ -324,8 +334,24 @@ class Game {
                     this.detectGestures();
                 }
 
+                if (this.screen === SCREENS.APP_START) {
+                    this.updatePreStartLogic(); // Reuse prestart logic for app start too
+                    if (this.screen === SCREENS.COUNTDOWN) { // It transitioned
+                        this.screen = SCREENS.LOBBY; // But we want lobby first
+                        this.preStartHoldTime = 0;
+                    }
+                }
+
                 if (this.screen === SCREENS.LOBBY) {
                     this.updateMenuLogic();
+                }
+
+                if (this.screen === SCREENS.PRE_START) {
+                    this.updatePreStartLogic();
+                }
+
+                if (this.screen === SCREENS.COUNTDOWN) {
+                    this.updateCountdownLogic();
                 }
 
                 if (this.screen === SCREENS.PLAYING) {
@@ -379,9 +405,44 @@ class Game {
         this.hitFeedback.push({
             text: "MISS",
             color: "#ff3333",
-            x: 512, y: 384, // Center for misses
+            x: this.canvas.width / 2, y: this.canvas.height / 2,
             time: Date.now()
         });
+    }
+
+    updatePreStartLogic() {
+        const lh = this.smoothLandmarks[15];
+        const rh = this.smoothLandmarks[16];
+
+        if (lh && rh) {
+            const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
+            const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
+
+            const inLeft = Math.hypot(lh.x - leftTarget.x, lh.y - leftTarget.y) < 100;
+            const inRight = Math.hypot(rh.x - rightTarget.x, rh.y - rightTarget.y) < 100;
+
+            if (inLeft && inRight) {
+                this.preStartHoldTime += 16;
+                if (this.preStartHoldTime >= 2000) {
+                    this.screen = SCREENS.COUNTDOWN;
+                    this.countdownStartTime = performance.now();
+                }
+            } else {
+                this.preStartHoldTime = 0;
+            }
+        } else {
+            this.preStartHoldTime = 0;
+        }
+    }
+
+    updateCountdownLogic() {
+        const elapsed = performance.now() - this.countdownStartTime;
+        if (elapsed < 1000) this.countdownValue = 3;
+        else if (elapsed < 2000) this.countdownValue = 2;
+        else if (elapsed < 3000) this.countdownValue = 1;
+        else {
+            this.startActualGameplay();
+        }
     }
 
     updateHUD() {
@@ -442,8 +503,17 @@ class Game {
             this.stabilizeSkeleton();
             this.updateTrails();
 
+            if (this.screen === SCREENS.APP_START) {
+                this.drawAppStart();
+            }
             if (this.screen === SCREENS.LOBBY) {
                 this.drawMenu();
+            }
+            if (this.screen === SCREENS.PRE_START) {
+                this.drawPreStart();
+            }
+            if (this.screen === SCREENS.COUNTDOWN) {
+                this.drawCountdown();
             }
             if (this.screen === SCREENS.RESULTS) {
                 this.drawResults();
@@ -575,7 +645,7 @@ class Game {
 
             if (foundHover !== -1 && foundHover === this.dwellIdx) {
                 this.dwellTime += 16;
-                if (this.dwellTime >= 1000) { // Reduced to 1s
+                if (this.dwellTime >= 600) { // Reduced to 0.6s
                     this.startGame();
                     this.dwellTime = 0;
                 }
@@ -670,6 +740,87 @@ class Game {
             this.ctx.fillText(Math.round(progress * 100) + "%", rh.x, rh.y + 7);
             this.ctx.textAlign = "left";
         }
+    }
+
+    drawAppStart() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+        this.ctx.fillStyle = "rgba(0,0,0,0.8)";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "white";
+        this.ctx.font = "bold 60px Outfit";
+        this.ctx.fillText("BAILARCON ONLINE", cx, cy - 100);
+        this.ctx.font = "bold 30px Outfit";
+        this.ctx.fillText("HOLD BOTH HANDS IN CIRCLES TO ENTER LOBBY", cx, cy + 150);
+
+        this.drawHandTargets();
+    }
+
+    drawPreStart() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.6)";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "white";
+        this.ctx.font = "bold 40px Outfit";
+        this.ctx.fillText("PREPARING STAGE...", cx, cy - 250);
+        this.ctx.font = "20px Outfit";
+        this.ctx.fillText("HOLD BOTH HANDS TO CONFIRM START", cx, cy - 200);
+
+        this.drawHandTargets();
+    }
+
+    drawHandTargets() {
+        const leftTarget = { x: this.canvas.width * 0.25, y: this.canvas.height * 0.4 };
+        const rightTarget = { x: this.canvas.width * 0.75, y: this.canvas.height * 0.4 };
+
+        [leftTarget, rightTarget].forEach((t, i) => {
+            this.ctx.beginPath();
+            this.ctx.arc(t.x, t.y, 80, 0, Math.PI * 2);
+            this.ctx.strokeStyle = "rgba(255,255,255,0.4)";
+            this.ctx.lineWidth = 8;
+            this.ctx.stroke();
+
+            // Progress Fill
+            if (this.preStartHoldTime > 0) {
+                const p = Math.min(1, this.preStartHoldTime / 2000);
+                this.ctx.beginPath();
+                this.ctx.arc(t.x, t.y, 80, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * p));
+                this.ctx.strokeStyle = "#00ffff";
+                this.ctx.stroke();
+            }
+
+            this.ctx.fillStyle = "white";
+            this.ctx.font = "bold 20px Outfit";
+            this.ctx.textAlign = "center";
+            this.ctx.fillText(i === 0 ? "LEFT" : "RIGHT", t.x, t.y + 7);
+        });
+    }
+
+    drawCountdown() {
+        const cx = this.canvas.width / 2;
+        const cy = this.canvas.height / 2;
+
+        this.ctx.fillStyle = "rgba(0,0,0,0.4)";
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.ctx.textAlign = "center";
+        this.ctx.fillStyle = "#00ffff";
+        this.ctx.font = "bold 150px Outfit";
+
+        const elapsed = (performance.now() - this.countdownStartTime) % 1000;
+        const scale = 1 + (elapsed / 1000);
+        this.ctx.save();
+        this.ctx.translate(cx, cy);
+        this.ctx.scale(scale, scale);
+        this.ctx.globalAlpha = 1 - (elapsed / 1000);
+        this.ctx.fillText(this.countdownValue, 0, 50);
+        this.ctx.restore();
     }
 
     drawResults() {
@@ -794,8 +945,8 @@ class Game {
     }
 
     triggerGesture(name) {
-        // Cooldown: Don't trigger multiple in 200ms
-        if (Date.now() - this.gestureTime < 200) return;
+        // Cooldown: Increased to 800ms to prevent accidental double-gestures
+        if (Date.now() - this.gestureTime < 800) return;
 
         this.lastGesture = name;
         this.gestureTime = Date.now();
