@@ -9,13 +9,6 @@ const TARGET_MAP = {
     'HAND': [15, 16, 19, 20], // Wrists, Index fingers
     'FOOT': [27, 28, 31, 32]  // Ankles, Toes
 };
-const HAND_SKELETON_CONNECTIONS = [
-    [0,1],[1,2],[2,3],[3,4],           // thumb
-    [0,5],[5,6],[6,7],[7,8],           // index
-    [5,9],[9,10],[10,11],[11,12],       // middle
-    [9,13],[13,14],[14,15],[15,16],     // ring
-    [13,17],[0,17],[17,18],[18,19],[19,20] // pinky + palm closure
-];
 
 class Circle {
     constructor(data, game) {
@@ -23,8 +16,9 @@ class Circle {
         this.game = game;
         this.hit = false;
         this.missed = false;
+        this.hitTime = null;
         this.radius = 60;
-        this.startTime = data.time - 1500; // Increased to 1500ms for better readability
+        this.startTime = data.time - 5000;
     }
 
     update(currentTime) {
@@ -47,11 +41,12 @@ class Circle {
                 const lm = this.game.smoothLandmarks[idx];
                 if (!lm) return false;
                 const dist = Math.hypot(lm.x - targetX, lm.y - targetY);
-                return dist < 80;
+                return dist < 40;
             });
 
             if (isHit) {
                 this.hit = true;
+                this.hitTime = currentTime;
                 const result = timeDiff < 80 ? 'PERFECT' : 'GOOD';
                 this.game.handleHit(result, { x: targetX, y: targetY });
             }
@@ -60,33 +55,29 @@ class Circle {
 
     draw(ctx, currentTime) {
         if (this.hit || this.missed) return;
-        const progress = (currentTime - this.startTime) / 1500;
+
+        const progress = (currentTime - this.startTime) / 5000;
         if (progress < 0) return;
 
+        const color = this.data.target === 'HAND' ? '#00ffff' : '#ff00ff';
+        const { x: cx, y: cy } = this.game.getRelativePos(this.data.x, this.data.y);
         const alpha = Math.min(1, progress * 4);
         const approachRadius = this.radius * (1 + 2 * (1 - progress));
 
-        // Background / Target
         ctx.save();
         ctx.globalAlpha = alpha;
         ctx.shadowBlur = 15;
-        const color = this.data.target === 'HAND' ? '#00ffff' : '#ff00ff';
         ctx.shadowColor = color;
         ctx.strokeStyle = color;
         ctx.lineWidth = 5;
-
-        // SCALE DRAWING COORDINATES
-        const { x: cx, y: cy } = this.game.getRelativePos(this.data.x, this.data.y);
-
         ctx.beginPath();
         ctx.arc(cx, cy, this.radius, 0, Math.PI * 2);
         ctx.stroke();
 
-        // Approach Circle
+        // Approach ring
         ctx.lineWidth = 2;
         ctx.beginPath();
-        const aRadius = Math.max(this.radius, approachRadius);
-        ctx.arc(cx, cy, aRadius, 0, Math.PI * 2);
+        ctx.arc(cx, cy, Math.max(this.radius, approachRadius), 0, Math.PI * 2);
         ctx.stroke();
         ctx.restore();
     }
@@ -97,8 +88,9 @@ class Slider {
         this.data = data;
         this.game = game;
         this.hit = false; this.missed = false;
+        this.hitTime = null;
         this.radius = 60;
-        this.startTime = data.time - 1500;
+        this.startTime = data.time - 5000;
         this.points = data.points || [];
     }
 
@@ -120,7 +112,7 @@ class Slider {
             const isTouching = targetIndices.some(idx => {
                 const lm = this.game.smoothLandmarks[idx];
                 if (!lm) return false;
-                return Math.hypot(lm.x - targetX, lm.y - targetY) < 100;
+                return Math.hypot(lm.x - targetX, lm.y - targetY) < 50;
             });
 
             if (isTouching) {
@@ -135,20 +127,22 @@ class Slider {
         // Final Judgment
         if (currentTime > this.data.time + this.data.duration) {
             this.hit = true;
-            this.game.handleHit('PERFECT', { x: 512, y: 384 }); // Default center feedback
+            this.hitTime = currentTime;
+            this.game.handleHit('PERFECT', { x: 512, y: 384 });
         }
     }
 
     draw(ctx, currentTime) {
         if (this.hit || this.missed) return;
+
         const totalDuration = this.data.duration;
         const elapsed = currentTime - this.data.time;
-        const progress = (currentTime - this.startTime) / 1500;
+        const progress = (currentTime - this.startTime) / 5000;
         if (progress < 0) return;
 
+        const color = this.data.target === 'HAND' ? '#00ffff' : '#ff00ff';
         ctx.save();
         ctx.shadowBlur = 15;
-        const color = this.data.target === 'HAND' ? '#00ffff' : '#ff00ff';
         ctx.strokeStyle = color;
         ctx.lineWidth = 10;
         ctx.lineJoin = 'round';
@@ -311,11 +305,16 @@ class Game {
         const selectedMap = this.maps[this.selectedMapIdx];
         console.log(`STARTING MAP: ${selectedMap.title}`);
         this.screen = SCREENS.PLAYING;
-        // ...
         this.gameStartTime = performance.now();
         this.score = 0; this.combo = 0; this.hits = 0; this.totalObjects = 0;
-        this.objects = sampleBeatmap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
+        this.maxCombo = 0; this.hitFeedback = [];
+        this.objects = selectedMap.objects.map(o => o.type === 'slider' ? new Slider(o, this) : new Circle(o, this));
         this.activeObjects = [];
+        // Compute last object end time so the game doesn't end prematurely
+        this.lastObjectTime = selectedMap.objects.reduce((max, o) => {
+            const endTime = o.time + (o.duration || 0);
+            return endTime > max ? endTime : max;
+        }, 0);
     }
 
     processLoop() {
@@ -345,25 +344,24 @@ class Game {
                 if (this.screen === SCREENS.PLAYING) {
                     const gameTime = now - this.gameStartTime;
 
-                    while (this.objects.length > 0 && (this.objects[0].startTime || 0) <= gameTime) {
-                        this.activeObjects.push(this.objects.shift());
+                    // Count-based spawn: only 2 objects on screen at a time.
+                    // Dynamic timing: each object gets its hit window 5000ms from when it spawns.
+                    while (this.activeObjects.length < 2 && this.objects.length > 0) {
+                        const obj = this.objects.shift();
+                        obj.data.time = gameTime + 5000;
+                        obj.startTime = gameTime;
+                        this.activeObjects.push(obj);
                     }
 
-                    this.activeObjects.forEach(obj => {
-                        obj.update(gameTime);
-                    });
+                    this.activeObjects.forEach(obj => obj.update(gameTime));
                     this.activeObjects = this.activeObjects.filter(o => !o.hit && !o.missed);
 
-                    // Game Completion Check
-                    if (gameTime > this.lastObjectTime + 1500) {
-                        this.screen = SCREENS.RESULTS;
-                    }
-                }
-
-                if (this.screen === SCREENS.RESULTS) {
-                    if (this.lastGesture === "SWIPE RIGHT") {
-                        this.screen = SCREENS.LOBBY;
-                        this.lastGesture = "NONE";
+                    // Infinite loop: reload map when queue and screen are both empty
+                    if (this.objects.length === 0 && this.activeObjects.length === 0) {
+                        const selectedMap = this.maps[this.selectedMapIdx];
+                        this.objects = selectedMap.objects.map(o =>
+                            o.type === 'slider' ? new Slider(o, this) : new Circle(o, this)
+                        );
                     }
                 }
             }
@@ -469,30 +467,9 @@ class Game {
             if (this.screen === SCREENS.LOBBY) {
                 this.drawMenu();
             }
-            if (this.screen === SCREENS.RESULTS) {
-                this.drawResults();
-            }
-
             if (this.screen === SCREENS.PLAYING) {
                 const gameTime = now - this.gameStartTime;
-
-                // Spawn new objects (800ms lead time)
-                while (this.objects.length > 0 && this.objects[0].data.time <= gameTime + 800) {
-                    this.activeObjects.push(this.objects.shift());
-                }
-
-                // Update and Draw active objects
-                this.activeObjects.forEach(obj => {
-                    obj.update(gameTime);
-                    obj.draw(this.ctx, gameTime);
-                });
-
-                this.activeObjects = this.activeObjects.filter(o => !o.hit && !o.missed);
-
-                // Completion Check
-                if (gameTime > this.lastObjectTime + 1500) {
-                    this.screen = SCREENS.RESULTS;
-                }
+                this.activeObjects.forEach(obj => obj.draw(this.ctx, gameTime));
             }
 
             const rawCount = this.handResult ? this.handResult.landmarks.length : 0;
@@ -544,27 +521,33 @@ class Game {
     }
 
     drawSkeleton() {
-        if (!this.handResult) return;
+        // Minimal hand indicator: one glowing dot at the wrist, one small dot at index tip.
+        // Uses smoothLandmarks (only 4 slots) — no raw 21-point iteration needed.
+        [[15, 19], [16, 20]].forEach(([wristIdx, tipIdx]) => {
+            const wrist = this.smoothLandmarks[wristIdx];
+            const tip = this.smoothLandmarks[tipIdx];
+            if (!wrist) return;
 
-        // Draw 21-point hand skeleton for each detected hand from raw result.
-        // Raw result is used (not smoothLandmarks) so visual feedback is instant.
-        this.handResult.landmarks.forEach((hand21, hi) => {
-            const isRight = this.handResult.handednesses[hi][0].categoryName === 'Left';
-            this.ctx.strokeStyle = isRight ? '#00ffff' : '#ff00ff';
-            this.ctx.lineWidth = 3;
+            const color = wristIdx === 16 ? '#00ffff' : '#ff00ff';
+            this.ctx.save();
+            this.ctx.shadowColor = color;
+            this.ctx.shadowBlur = 20;
+            this.ctx.fillStyle = color;
 
-            HAND_SKELETON_CONNECTIONS.forEach(([i, j]) => {
-                const x1 = (1 - hand21[i].x) * this.canvas.width, y1 = hand21[i].y * this.canvas.height;
-                const x2 = (1 - hand21[j].x) * this.canvas.width, y2 = hand21[j].y * this.canvas.height;
-                this.ctx.beginPath(); this.ctx.moveTo(x1, y1); this.ctx.lineTo(x2, y2); this.ctx.stroke();
-            });
+            // Wrist dot
+            this.ctx.beginPath();
+            this.ctx.arc(wrist.x, wrist.y, 12, 0, Math.PI * 2);
+            this.ctx.fill();
 
-            this.ctx.fillStyle = '#ffff00';
-            hand21.forEach((lm, idx) => {
-                const px = (1 - lm.x) * this.canvas.width, py = lm.y * this.canvas.height;
-                const r = (idx === 0 || idx === 8) ? 10 : 5; // bigger dot at wrist + index tip
-                this.ctx.beginPath(); this.ctx.arc(px, py, r, 0, Math.PI * 2); this.ctx.fill();
-            });
+            // Index tip dot
+            if (tip) {
+                this.ctx.shadowBlur = 10;
+                this.ctx.beginPath();
+                this.ctx.arc(tip.x, tip.y, 6, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+
+            this.ctx.restore();
         });
     }
 
