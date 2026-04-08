@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f beatmap.js hand_landmarker.task index.html main.js package-lock.json package.json pose_landmarker.task style.css vision_bundle.js)",
+      "Bash(rm -rf wasm/ node_modules/)"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "track_name": "demo_track",
+  "bpm": 120,
+  "boxes": [
+    { "id": "b1", "time_sec": 1.5, "x_norm": 0.2, "y_norm": 0.5, "target_joint": "left_wrist" }
+  ]
+}
